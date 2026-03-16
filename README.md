@@ -39,20 +39,3 @@ src/
     ├── NavBar.jsx                  ← Navbar minimalista
     └── AgendaTab.jsx               ← Agenda geral
 ```
-
-## Como rodar
-
-```bash
-npm install
-cp .env.example .env     # preencha com suas credenciais Supabase
-npm run dev
-```
-
-## Deploy
-
-Veja o README principal ou siga o guia em `supabase_schema.sql`.
-
-## Login Admin
-
-- **Email:** `admin@studyvieira.com`
-- **Senha:** `SV@Admin2025!`
