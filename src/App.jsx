@@ -847,6 +847,14 @@ export default function App(){
   // ── localStorage-only auth ────────────────────────────────────────────────
   const login=(u)=>{
     if(!USE_SUPABASE)DB.set(K.session,u);
+    else{
+      // Clear stale localStorage cache on every Supabase login
+      // Fresh data will be loaded by _syncFromSupabase
+      const keysToKeep=["sv5_theme","sv5_pomodoro_sessions"];
+      Object.keys(localStorage).forEach(k=>{
+        if(k.startsWith("sv5_")&&!keysToKeep.includes(k)) localStorage.removeItem(k);
+      });
+    }
     _currentUserId=u.id;
     setUser(u);setTab("home");SFX.login();
   };
@@ -897,6 +905,7 @@ export default function App(){
           {tab==="comunidade"&&<div key="c" className="page-enter"><CommunityTab  user={user} viewUser={viewUser} setViewUser={setViewUser}/></div>}
           {tab==="perfil"    &&<div key="p" className="page-enter"><ProfileTab    user={user} setUser={(u)=>{DB.set(K.session,u);setUser(u);}}/></div>}
           {tab==="admin"     &&<div key="ad" className="page-enter"><AdminTab      user={user} refreshUser={refreshUser}/></div>}
+          {tab==="feedback"  &&<div key="fb" className="page-enter"><FeedbackTab   user={user}/></div>}
         </div>
       </>}
     </div>
@@ -1053,7 +1062,7 @@ function AuthPage({onLogin}){
 function NavBar({user,tab,setTab,onLogout,dark,toggleTheme}){
   const admin=isAdmin(user);
   const prof=getProfile(user.id);
-  const navTabs=[{k:"home",l:"Início"},{k:"materias",l:"Matérias"},{k:"agenda",l:"Agenda"},{k:"comunidade",l:"Comunidade"}];
+  const navTabs=[{k:"home",l:"Início"},{k:"materias",l:"Matérias"},{k:"agenda",l:"Agenda"},{k:"comunidade",l:"Comunidade"},{k:"feedback",l:"📬 Feedback"}];
   return(<nav className="nav">
     {/* Logo */}
     <div className="nlogo" onClick={()=>setTab("home")}>◈ <span style={{fontWeight:700}}>Study</span><span style={{color:"var(--t2)",fontWeight:400}}> Vieira</span></div>
@@ -2935,6 +2944,130 @@ function FlashcardsTab({user,subj}){
         ))}
       </div>
     }
+  </div>);
+}
+
+
+// ══════════════════════════════════════════════════════════════════════════════
+//  FEEDBACK TAB — Sugestões e bugs
+// ══════════════════════════════════════════════════════════════════════════════
+function FeedbackTab({user}){
+  const [type,setType]=useState("sugestao");
+  const [msg,setMsg]=useState("");
+  const [sent,setSent]=useState(false);
+  const [loading,setLoading]=useState(false);
+  const [err,setErr]=useState("");
+
+  const TYPES=[
+    {v:"sugestao",l:"💡 Sugestão",color:"#7dd3fc"},
+    {v:"bug",     l:"🐛 Bug",     color:"#fda4af"},
+    {v:"elogio",  l:"⭐ Elogio",  color:"#fcd34d"},
+    {v:"outro",   l:"💬 Outro",   color:"#c4b5fd"},
+  ];
+
+  const submit=async()=>{
+    if(!msg.trim()){setErr("Escreva sua mensagem.");return;}
+    setLoading(true);setErr("");
+    try{
+      // Save to Supabase feedback table (if exists) or just use a webhook
+      // Using a simple email via mailto as fallback + save to localStorage log
+      const feedback={
+        id:uid(), userId:user.id, userName:user.name,
+        userEmail:user.email, type, message:msg.trim(),
+        createdAt:new Date().toISOString()
+      };
+      // Save locally as log
+      const log=JSON.parse(localStorage.getItem("sv5_feedback_log")||"[]");
+      localStorage.setItem("sv5_feedback_log",JSON.stringify([...log,feedback]));
+      // Try to save to Supabase feedback table
+      if(USE_SUPABASE&&sb){
+        try{
+          await sb.from("feedback").insert({
+            user_id:user.id, user_name:user.name,
+            user_email:user.email, type, message:msg.trim()
+          });
+        }catch(_){}
+      }
+      setSent(true);setMsg("");
+      setTimeout(()=>setSent(false),4000);
+    }catch(e){setErr("Erro ao enviar. Tente novamente.");}
+    finally{setLoading(false);}
+  };
+
+  return(<div className="fu">
+    <G style={{padding:28,maxWidth:540,margin:"0 auto"}}>
+      <div style={{textAlign:"center",marginBottom:24}}>
+        <div style={{fontSize:36,marginBottom:8}}>📬</div>
+        <h2 style={{fontSize:20,fontWeight:700,marginBottom:6}}>Fale conosco</h2>
+        <p style={{fontSize:13,color:"var(--t2)",lineHeight:1.6}}>
+          Encontrou um bug? Tem uma sugestão? Manda pra gente!
+        </p>
+      </div>
+
+      {sent&&<div className="ok" style={{textAlign:"center",marginBottom:16}}>
+        ✅ Mensagem enviada! Obrigado pelo feedback.
+      </div>}
+
+      {/* Type selector */}
+      <div style={{display:"flex",gap:8,marginBottom:20,flexWrap:"wrap"}}>
+        {TYPES.map(t=>(
+          <button key={t.v} onClick={()=>setType(t.v)}
+            style={{padding:"8px 16px",borderRadius:20,border:`1px solid ${type===t.v?t.color+"80":"var(--b2)"}`,
+              background:type===t.v?`${t.color}20`:"var(--card-bg)",
+              color:type===t.v?t.color:"var(--t2)",
+              fontSize:13,fontWeight:type===t.v?600:400,cursor:"pointer",
+              fontFamily:"inherit",transition:"all .18s"}}>
+            {t.l}
+          </button>
+        ))}
+      </div>
+
+      {err&&<div className="er">{err}</div>}
+
+      <div className="fg">
+        <label>Sua mensagem</label>
+        <textarea className="inp" rows={5}
+          placeholder={
+            type==="bug"?"Descreva o bug: o que aconteceu, em qual tela, o que esperava ver...":
+            type==="sugestao"?"Qual funcionalidade você gostaria de ver no Study Vieira?":
+            type==="elogio"?"O que você mais gosta no app?":
+            "O que você quer nos dizer?"
+          }
+          value={msg} onChange={e=>setMsg(e.target.value)}
+          style={{minHeight:120}}
+        />
+      </div>
+
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,flexWrap:"wrap"}}>
+        <div style={{fontSize:12,color:"var(--t3)"}}>
+          Enviando como <strong style={{color:"var(--t2)"}}>{user.name}</strong> · {user.email}
+        </div>
+        <button className="btn btn-f" onClick={submit} disabled={loading||!msg.trim()}
+          style={{minWidth:120}}>
+          {loading?"Enviando...":"Enviar 📤"}
+        </button>
+      </div>
+
+      <div style={{marginTop:24,padding:"16px",borderRadius:12,background:"var(--card-bg)",border:"1px solid var(--b2)"}}>
+        <div style={{fontSize:12,color:"var(--t2)",marginBottom:8,fontWeight:600}}>Outros canais</div>
+        <div style={{display:"flex",gap:10,flexWrap:"wrap"}}>
+          <a href="https://wa.me/551194398317?text=Olá!%20Tenho%20um%20feedback%20sobre%20o%20Study%20Vieira"
+            target="_blank" rel="noopener noreferrer"
+            style={{display:"inline-flex",alignItems:"center",gap:6,padding:"7px 14px",borderRadius:10,
+              background:"rgba(134,239,172,0.12)",border:"1px solid rgba(134,239,172,0.25)",
+              color:"#86efac",fontSize:12,fontWeight:500,textDecoration:"none"}}>
+            📱 WhatsApp
+          </a>
+          <a href="mailto:nathanvieiragg@outlook.com?subject=Feedback Study Vieira"
+            target="_blank" rel="noopener noreferrer"
+            style={{display:"inline-flex",alignItems:"center",gap:6,padding:"7px 14px",borderRadius:10,
+              background:"rgba(125,211,252,0.12)",border:"1px solid rgba(125,211,252,0.25)",
+              color:"#7dd3fc",fontSize:12,fontWeight:500,textDecoration:"none"}}>
+            📧 E-mail
+          </a>
+        </div>
+      </div>
+    </G>
   </div>);
 }
 
