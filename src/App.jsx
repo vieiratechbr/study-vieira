@@ -880,76 +880,110 @@ function AuthPage({onLogin}){
   const [pass,setPass]=useState("");
   const [err,setErr]=useState("");
   const [loading,setLoading]=useState(false);
+  const mounted=useRef(true);
+  useEffect(()=>{mounted.current=true;return()=>{mounted.current=false;};},[]);
+
+  const safe=(fn)=>{ if(mounted.current) fn(); };
 
   const submit=async()=>{
-    setErr("");setLoading(true);
+    safe(()=>{setErr("");setLoading(true);});
     try{
       if(!USE_SUPABASE){
+        // LocalStorage mode
         const users=DB.get(K.users)||{};
         if(mode==="cadastro"){
-          if(!name.trim()||!email.trim()||!pass.trim()){setErr("Preencha todos os campos.");SFX.error();setLoading(false);return;}
-          if(users[email]){setErr("E-mail já cadastrado.");setLoading(false);return;}
+          if(!name.trim()||!email.trim()||!pass.trim()){safe(()=>{setErr("Preencha todos os campos.");setLoading(false);});SFX.error();return;}
+          if(users[email]){safe(()=>{setErr("E-mail já cadastrado.");setLoading(false);});return;}
           const u={id:uid(),name:name.trim(),email};
           _LS.set(K.users,{...users,[email]:{...u,pass}});
           onLogin(u);
         }else{
-          if(!email.trim()||!pass.trim()){setErr("Preencha e-mail e senha.");SFX.error();setLoading(false);return;}
+          if(!email.trim()||!pass.trim()){safe(()=>{setErr("Preencha e-mail e senha.");setLoading(false);});SFX.error();return;}
           const te=email.trim().toLowerCase();
           if(te===FOUNDER){
-            if(pass!==FOUNDER_PASS){setErr("Senha incorreta.");SFX.error();setLoading(false);return;}
+            if(pass!==FOUNDER_PASS){safe(()=>{setErr("Senha incorreta.");setLoading(false);});SFX.error();return;}
             onLogin({id:FOUNDER_ID,name:"Admin Study Vieira",email:FOUNDER,isAdm:true});return;
           }
           const u=users[te]||users[email.trim()];
-          if(!u||u.pass!==pass){setErr("Credenciais inválidas.");SFX.error();setLoading(false);return;}
-          if(isBanned(u.id)){setErr("Conta suspensa.");setLoading(false);return;}
+          if(!u||u.pass!==pass){safe(()=>{setErr("Credenciais inválidas.");setLoading(false);});SFX.error();return;}
+          if(isBanned(u.id)){safe(()=>{setErr("Conta suspensa.");setLoading(false);});return;}
           onLogin({id:u.id,name:u.name,email:u.email});
         }
-      }else{
-        if(mode==="cadastro"){
-          if(!name.trim()||!email.trim()||!pass.trim()){setErr("Preencha todos os campos.");SFX.error();setLoading(false);return;}
-          if(pass.length<6){setErr("Senha precisa ter ao menos 6 caracteres.");setLoading(false);return;}
-          const{data,error}=await sb.auth.signUp({email:email.trim(),password:pass,options:{data:{name:name.trim()}}});
-          if(error){setErr(error.message);SFX.error();setLoading(false);return;}
-          try{await sb.from("profiles").upsert({id:data.user.id,name:name.trim(),email:email.trim(),bio:""});}catch(_){}
-          onLogin({id:data.user.id,name:name.trim(),email:email.trim(),isAdm:false});
-        }else{
-          if(!email.trim()||!pass.trim()){setErr("Preencha e-mail e senha.");SFX.error();setLoading(false);return;}
-          // Step 1: authenticate
-          const{data,error}=await sb.auth.signInWithPassword({email:email.trim(),password:pass});
-          if(error){setErr(error.message);SFX.error();setLoading(false);return;}
-          const sbUser=data.user;
-          // Step 2: get profile (don't throw if missing)
-          let prof=null,ban=null,admRow=null;
-          try{({data:prof}=await sb.from("profiles").select("*").eq("id",sbUser.id).maybeSingle());}catch(_){}
-          try{({data:ban}=await sb.from("bans").select("*").eq("user_id",sbUser.id).maybeSingle());}catch(_){}
-          if(ban&&!(ban.expires_at&&new Date(ban.expires_at)<new Date())){
-            await sb.auth.signOut();setErr("Conta suspensa: "+(ban.reason||""));setLoading(false);return;
-          }
-          // Step 4: check admin
-          try{({data:admRow}=await sb.from("admins").select("email").eq("email",sbUser.email).maybeSingle());}catch(_){}
-          const isAdm=sbUser.email===FOUNDER||admRow!==null;
-          // Step 5: create profile if missing (e.g. admin created via Supabase dashboard)
-          if(!prof){
-            try{await sb.from("profiles").upsert({id:sbUser.id,name:sbUser.user_metadata?.name||sbUser.email.split("@")[0],email:sbUser.email,bio:""});}catch(_){}
-          }
-          // Cache profile locally
-          const profData=prof||{};
-          _LS.set(K.profile(sbUser.id),{
-            avatar:profData.avatar_url||null,bio:profData.bio||"",banner:profData.banner||null,
-            bannerImg:profData.banner_img||null,gender:profData.gender||"Prefiro não dizer",
-            age:profData.age||"",course:profData.course||""
-          });
-          // Step 6: login
-          onLogin({id:sbUser.id,name:prof?.name||sbUser.user_metadata?.name||sbUser.email,email:sbUser.email,isAdm});
-          // Step 7: sync rest of data in background
-          setTimeout(()=>_syncFromSupabase(sbUser.id).catch(()=>{}),500);
-        }
+        return;
       }
+
+      // ── Supabase mode ──────────────────────────────────────────────────────
+      if(mode==="cadastro"){
+        if(!name.trim()||!email.trim()||!pass.trim()){safe(()=>{setErr("Preencha todos os campos.");setLoading(false);});SFX.error();return;}
+        if(pass.length<6){safe(()=>{setErr("Senha precisa ter ao menos 6 caracteres.");setLoading(false);});return;}
+        const{data,error}=await sb.auth.signUp({
+          email:email.trim(),password:pass,
+          options:{data:{name:name.trim()}}
+        });
+        if(error){safe(()=>{setErr(error.message);setLoading(false);});SFX.error();return;}
+        // Create profile
+        try{ await sb.from("profiles").upsert({id:data.user.id,name:name.trim(),email:email.trim(),bio:""}); }catch(_){}
+        onLogin({id:data.user.id,name:name.trim(),email:email.trim(),isAdm:false});
+
+      }else{
+        if(!email.trim()||!pass.trim()){safe(()=>{setErr("Preencha e-mail e senha.");setLoading(false);});SFX.error();return;}
+
+        // Sign in
+        const{data,error}=await sb.auth.signInWithPassword({email:email.trim(),password:pass});
+        if(error){safe(()=>{setErr(error.message);setLoading(false);});SFX.error();return;}
+
+        const sbUser=data.user;
+
+        // Get profile
+        let prof=null;
+        try{ const r=await sb.from("profiles").select("*").eq("id",sbUser.id).maybeSingle(); prof=r.data; }catch(_){}
+
+        // Check ban
+        let ban=null;
+        try{ const r=await sb.from("bans").select("*").eq("user_id",sbUser.id).maybeSingle(); ban=r.data; }catch(_){}
+        if(ban&&!(ban.expires_at&&new Date(ban.expires_at)<new Date())){
+          await sb.auth.signOut();
+          safe(()=>{setErr("Conta suspensa: "+(ban.reason||""));setLoading(false);});
+          return;
+        }
+
+        // Check admin
+        let isAdm=sbUser.email===FOUNDER;
+        if(!isAdm){
+          try{ const r=await sb.from("admins").select("email").eq("email",sbUser.email).maybeSingle(); isAdm=r.data!==null; }catch(_){}
+        }
+
+        // Auto-create profile if missing
+        if(!prof){
+          const autoName=sbUser.user_metadata?.name||sbUser.email.split("@")[0];
+          try{ await sb.from("profiles").upsert({id:sbUser.id,name:autoName,email:sbUser.email,bio:""}); }catch(_){}
+          prof={name:autoName};
+        }
+
+        // Cache locally
+        try{
+          _LS.set(K.profile(sbUser.id),{
+            avatar:prof.avatar_url||null, bio:prof.bio||"",
+            banner:prof.banner||null, bannerImg:prof.banner_img||null,
+            gender:prof.gender||"Prefiro não dizer", age:prof.age||"", course:prof.course||""
+          });
+        }catch(_){}
+
+        // Login — this causes component unmount, so do it last
+        const userName=prof.name||sbUser.user_metadata?.name||sbUser.email;
+        onLogin({id:sbUser.id,name:userName,email:sbUser.email,isAdm});
+
+        // Sync data in background
+        setTimeout(()=>{ _syncFromSupabase(sbUser.id).catch(()=>{}); },1000);
+      }
+
     }catch(e){
-      console.error("[Auth error]",e);
-      setErr(e.message||"Erro ao autenticar.");
+      console.error("[Auth]",e);
+      safe(()=>{ setErr(e.message||"Erro ao autenticar."); });
       SFX.error();
-    }finally{setLoading(false);}
+    }finally{
+      safe(()=>setLoading(false));
+    }
   };
 
   return(<div className="pc"><G cls="si" style={{maxWidth:380,width:"100%",padding:34}}>
@@ -964,7 +998,9 @@ function AuthPage({onLogin}){
     <div className="fg"><label>E-mail</label>
       <input className="inp" type="email" placeholder="email@exemplo.com" value={email} onChange={e=>setEmail(e.target.value)}/></div>
     <div className="fg" style={{marginBottom:20}}><label>Senha</label>
-      <input className="inp" type="password" placeholder="••••••••" value={pass} onChange={e=>setPass(e.target.value)} onKeyDown={e=>e.key==="Enter"&&submit()}/></div>
+      <input className="inp" type="password" placeholder="••••••••" value={pass}
+        onChange={e=>setPass(e.target.value)}
+        onKeyDown={e=>e.key==="Enter"&&!loading&&submit()}/></div>
     <button className="btn btn-f" style={{width:"100%",fontSize:14}} onClick={submit} disabled={loading}>
       {loading?"Aguarde...":(mode==="login"?"Entrar":"Criar conta")}
     </button>
