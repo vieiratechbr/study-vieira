@@ -51,7 +51,7 @@ const DB = {
     _LS.set(k, v);
     // Mirror to Supabase async (fire-and-forget)
     if (USE_SUPABASE && sb && v) {
-      _sbMirror(k, v).catch(e=>console.warn('[SB]',key,e?.message));
+      _sbMirror(k, v).catch(e=>console.warn('[SB]',e?.message));
     }
   },
 };
@@ -70,7 +70,7 @@ const _sbMirror = async (key, value) => {
         id:s.id, user_id:userId, name:s.name, description:s.desc||null,
         color_id:s.color?.id, color_dot:s.color?.dot, color_glow:s.color?.glow, color_tint:s.color?.tint,
         category:s.cat||"faculdade"
-      }).catch(e=>console.warn('[SB]',key,e?.message));
+      }).catch(e=>console.warn('[SB]',e?.message));
     }
     return;
   }
@@ -82,7 +82,7 @@ const _sbMirror = async (key, value) => {
       await sb.from("contents").upsert({
         id:c.id, subject_id:sid, title:c.title, type:c.type||"aula",
         date:c.date||null, description:c.desc||null, done:!!c.done
-      }).catch(e=>console.warn('[SB]',key,e?.message));
+      }).catch(e=>console.warn('[SB]',e?.message));
     }
     return;
   }
@@ -91,7 +91,7 @@ const _sbMirror = async (key, value) => {
   if (key.startsWith("sv5_note_") && Array.isArray(value)) {
     const parts = key.split("_"); const sid = parts[parts.length-1];
     for (const n of value) {
-      await sb.from("notes").upsert({ id:n.id, subject_id:sid, title:n.title, body:n.body||null }).catch(e=>console.warn('[SB]',key,e?.message));
+      await sb.from("notes").upsert({ id:n.id, subject_id:sid, title:n.title, body:n.body||null }).catch(e=>console.warn('[SB]',e?.message));
     }
     return;
   }
@@ -103,7 +103,7 @@ const _sbMirror = async (key, value) => {
       await sb.from("provas").upsert({
         id:p.id, subject_id:sid, title:p.title, date:p.date,
         weight:p.weight||null, notes:p.notes||null, grade:p.grade||null
-      }).catch(e=>console.warn('[SB]',key,e?.message));
+      }).catch(e=>console.warn('[SB]',e?.message));
     }
     return;
   }
@@ -121,7 +121,7 @@ const _sbMirror = async (key, value) => {
         bio: value.bio||null, avatar_url: value.avatar||null,
         banner: value.banner||null, banner_img: value.bannerImg||null,
         gender: value.gender||null, age: value.age||null, course: value.course||null
-      }).catch(e=>console.warn('[SB]',key,e?.message));
+      }).catch(e=>console.warn('[SB]',e?.message));
     }
     return;
   }
@@ -144,7 +144,7 @@ const _sbMirror = async (key, value) => {
     try {
       const rows = toSB(value);
       if (rows.length > 0) {
-        await sb.from(table).upsert(rows).catch(e=>console.warn('[SB]',key,e?.message));
+        await sb.from(table).upsert(rows).catch(e=>console.warn('[SB]',e?.message));
       } else {
         // If empty array, could mean deletion — skip for safety
       }
@@ -791,19 +791,29 @@ export default function App(){
   },[]);
 
   const _loginFromSession=async(sbUser)=>{
-    const{data:prof}=await sb.from("profiles").select("*").eq("id",sbUser.id).single();
+    const{data:prof}=await sb.from("profiles").select("*").eq("id",sbUser.id).maybeSingle();
     const{data:adm}=await sb.from("admins").select("email").eq("email",sbUser.email).single();
     const isAdm=sbUser.email===FOUNDER||!!adm;
     const u={id:sbUser.id,name:prof?.name||sbUser.email,email:sbUser.email,isAdm};
     _currentUserId=u.id;
     // Cache profile to localStorage so components work unchanged
-    if(prof) DB._ls_set(K.profile(u.id),{
-      avatar:prof.avatar_url,bio:prof.bio,banner:prof.banner,
-      bannerImg:prof.banner_img,gender:prof.gender,age:prof.age,course:prof.course
+    // Create profile row if missing
+    if(!prof){
+      await sb.from("profiles").upsert({id:sbUser.id,name:sbUser.user_metadata?.name||sbUser.email.split("@")[0],email:sbUser.email,bio:""}).catch(()=>{});
+    }
+    const profData=prof||{};
+    _LS.set(K.profile(u.id),{
+      avatar:profData.avatar_url||null,
+      bio:profData.bio||"",
+      banner:profData.banner||null,
+      bannerImg:profData.banner_img||null,
+      gender:profData.gender||"Prefiro não dizer",
+      age:profData.age||"",
+      course:profData.course||""
     });
     setUser(u);
     // Sync all user data to localStorage cache (async, no await)
-    _syncFromSupabase(u.id).catch(e=>console.warn('[SB]',key,e?.message));
+    _syncFromSupabase(u.id).catch(e=>console.warn('[SB sync]',e?.message));
     return u;
   };
 
@@ -903,26 +913,46 @@ function AuthPage({onLogin}){
           if(!name.trim()||!email.trim()||!pass.trim()){setErr("Preencha todos os campos.");SFX.error();setLoading(false);return;}
           if(pass.length<6){setErr("Senha precisa ter ao menos 6 caracteres.");setLoading(false);return;}
           const{data,error}=await sb.auth.signUp({email:email.trim(),password:pass,options:{data:{name:name.trim()}}});
-          if(error)throw error;
-          await sb.from("profiles").upsert({id:data.user.id,name:name.trim(),email:email.trim(),bio:""});
-          const{data:adm}=await sb.from("admins").select("email").eq("email",email.trim()).single();
-          onLogin({id:data.user.id,name:name.trim(),email:email.trim(),isAdm:!!adm});
+          if(error){setErr(error.message);SFX.error();setLoading(false);return;}
+          await sb.from("profiles").upsert({id:data.user.id,name:name.trim(),email:email.trim(),bio:""}).catch(()=>{});
+          onLogin({id:data.user.id,name:name.trim(),email:email.trim(),isAdm:false});
         }else{
           if(!email.trim()||!pass.trim()){setErr("Preencha e-mail e senha.");SFX.error();setLoading(false);return;}
+          // Step 1: authenticate
           const{data,error}=await sb.auth.signInWithPassword({email:email.trim(),password:pass});
-          if(error)throw error;
-          const{data:prof}=await sb.from("profiles").select("*").eq("id",data.user.id).single();
-          const{data:ban}=await sb.from("bans").select("*").eq("user_id",data.user.id).maybeSingle();
+          if(error){setErr(error.message);SFX.error();setLoading(false);return;}
+          const sbUser=data.user;
+          // Step 2: get profile (don't throw if missing)
+          const{data:prof}=await sb.from("profiles").select("*").eq("id",sbUser.id).maybeSingle().catch(()=>({data:null}));
+          // Step 3: check ban
+          const{data:ban}=await sb.from("bans").select("*").eq("user_id",sbUser.id).maybeSingle().catch(()=>({data:null}));
           if(ban&&!(ban.expires_at&&new Date(ban.expires_at)<new Date())){
             await sb.auth.signOut();setErr("Conta suspensa: "+(ban.reason||""));setLoading(false);return;
           }
-          const{data:adm}=await sb.from("admins").select("email").eq("email",email.trim()).maybeSingle();
-          onLogin({id:data.user.id,name:prof?.name||data.user.email,email:data.user.email,isAdm:data.user.email===FOUNDER||!!adm});
-          _syncFromSupabase(data.user.id).catch(e=>console.warn('[SB]',key,e?.message));
+          // Step 4: check admin
+          const isAdm=sbUser.email===FOUNDER||(await sb.from("admins").select("email").eq("email",sbUser.email).maybeSingle().catch(()=>({data:null}))).data!==null;
+          // Step 5: create profile if missing (e.g. admin created via Supabase dashboard)
+          if(!prof){
+            await sb.from("profiles").upsert({id:sbUser.id,name:sbUser.email.split("@")[0],email:sbUser.email,bio:""}).catch(()=>{});
+          }
+          // Cache profile locally
+          const profData=prof||{};
+          _LS.set(K.profile(sbUser.id),{
+            avatar:profData.avatar_url||null,bio:profData.bio||"",banner:profData.banner||null,
+            bannerImg:profData.banner_img||null,gender:profData.gender||"Prefiro não dizer",
+            age:profData.age||"",course:profData.course||""
+          });
+          // Step 6: login
+          onLogin({id:sbUser.id,name:prof?.name||sbUser.user_metadata?.name||sbUser.email,email:sbUser.email,isAdm});
+          // Step 7: sync rest of data in background
+          setTimeout(()=>_syncFromSupabase(sbUser.id).catch(()=>{}),500);
         }
       }
-    }catch(e){setErr(e.message||"Erro ao autenticar.");SFX.error();}
-    finally{setLoading(false);}
+    }catch(e){
+      console.error("[Auth error]",e);
+      setErr(e.message||"Erro ao autenticar.");
+      SFX.error();
+    }finally{setLoading(false);}
   };
 
   return(<div className="pc"><G cls="si" style={{maxWidth:380,width:"100%",padding:34}}>
@@ -2163,9 +2193,31 @@ function ProfileTab({user,setUser}){
     const users=DB.get(K.users)||{};
     if(users[user.email])DB.set(K.users,{...users,[user.email]:{...users[user.email],name:name.trim()}});
     const nu={...user,name:name.trim()};setUser(nu);
-    // Sync to Supabase
+    // Sync to Supabase — avatar base64 pode ser grande, trunca se necessário
     if(USE_SUPABASE){
-      await sb.from("profiles").upsert({id:user.id,name:name.trim(),email:user.email,bio,avatar_url:avatar||null,banner:bannerImg?null:banner,banner_img:bannerImg||null,gender,age:age||null,course:course||null});
+      // Avatar: se for base64 muito grande (>500KB), sobe via Storage
+      let avatarUrl=avatar||null;
+      if(avatar&&avatar.startsWith("data:")&&avatar.length>500000){
+        try{
+          const res=await fetch(avatar);const blob=await res.blob();
+          const path=`avatars/${user.id}.jpg`;
+          const{error:upErr}=await sb.storage.from("avatars").upload(path,blob,{upsert:true,contentType:"image/jpeg"});
+          if(!upErr){const{data:pub}=sb.storage.from("avatars").getPublicUrl(path);avatarUrl=pub.publicUrl;}
+        }catch(e){console.warn("[SB] avatar upload",e.message);}
+      }
+      const{error}=await sb.from("profiles").upsert({
+        id:user.id,
+        name:name.trim(),
+        email:user.email,
+        bio:bio||null,
+        avatar_url:avatarUrl,
+        banner:bannerImg?null:(banner||null),
+        banner_img:bannerImg||null,
+        gender:gender||null,
+        age:age?String(age):null,
+        course:course||null
+      });
+      if(error){console.error("[SB] profile save error:",error.message);setOk("Erro ao salvar: "+error.message);return;}
     }
     setEditing(false);setOk("Perfil atualizado!");setTimeout(()=>setOk(""),2500);
   };
