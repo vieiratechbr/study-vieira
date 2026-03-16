@@ -51,7 +51,7 @@ const DB = {
     _LS.set(k, v);
     // Mirror to Supabase async (fire-and-forget)
     if (USE_SUPABASE && sb && v) {
-      _sbMirror(k, v).catch(()=>{});
+      _sbMirror(k, v).catch(e=>console.warn('[SB]',key,e?.message));
     }
   },
 };
@@ -60,6 +60,7 @@ const DB = {
 const _sbMirror = async (key, value) => {
   if (!USE_SUPABASE || !sb) return;
   const uid = _currentUserId;
+  if (!uid && !key.startsWith("sv5_posts") && !key.startsWith("sv5_comm") && !key.startsWith("sv5_bans") && !key.startsWith("sv5_admins")) return;
 
   // Subject data: sv5_subj_{uid}
   if (key.startsWith("sv5_subj_") && Array.isArray(value)) {
@@ -69,7 +70,7 @@ const _sbMirror = async (key, value) => {
         id:s.id, user_id:userId, name:s.name, description:s.desc||null,
         color_id:s.color?.id, color_dot:s.color?.dot, color_glow:s.color?.glow, color_tint:s.color?.tint,
         category:s.cat||"faculdade"
-      }).catch(()=>{});
+      }).catch(e=>console.warn('[SB]',key,e?.message));
     }
     return;
   }
@@ -81,7 +82,7 @@ const _sbMirror = async (key, value) => {
       await sb.from("contents").upsert({
         id:c.id, subject_id:sid, title:c.title, type:c.type||"aula",
         date:c.date||null, description:c.desc||null, done:!!c.done
-      }).catch(()=>{});
+      }).catch(e=>console.warn('[SB]',key,e?.message));
     }
     return;
   }
@@ -90,7 +91,7 @@ const _sbMirror = async (key, value) => {
   if (key.startsWith("sv5_note_") && Array.isArray(value)) {
     const parts = key.split("_"); const sid = parts[parts.length-1];
     for (const n of value) {
-      await sb.from("notes").upsert({ id:n.id, subject_id:sid, title:n.title, body:n.body||null }).catch(()=>{});
+      await sb.from("notes").upsert({ id:n.id, subject_id:sid, title:n.title, body:n.body||null }).catch(e=>console.warn('[SB]',key,e?.message));
     }
     return;
   }
@@ -102,7 +103,7 @@ const _sbMirror = async (key, value) => {
       await sb.from("provas").upsert({
         id:p.id, subject_id:sid, title:p.title, date:p.date,
         weight:p.weight||null, notes:p.notes||null, grade:p.grade||null
-      }).catch(()=>{});
+      }).catch(e=>console.warn('[SB]',key,e?.message));
     }
     return;
   }
@@ -120,7 +121,18 @@ const _sbMirror = async (key, value) => {
         bio: value.bio||null, avatar_url: value.avatar||null,
         banner: value.banner||null, banner_img: value.bannerImg||null,
         gender: value.gender||null, age: value.age||null, course: value.course||null
-      }).catch(()=>{});
+      }).catch(e=>console.warn('[SB]',key,e?.message));
+    }
+    return;
+  }
+
+  // Community posts: sv5_cposts
+  if (key === K.cposts && Array.isArray(value)) {
+    for (const p of value) {
+      await sb.from("community_posts").upsert({
+        id:p.id, community_id:p.communityId, title:p.title||null, body:p.body||null,
+        img:p.img||null, tag:p.tag, pinned:!!p.pinned, author_name:p.authorName
+      }).catch(e=>console.warn('[SB] cposts',e?.message));
     }
     return;
   }
@@ -132,7 +144,7 @@ const _sbMirror = async (key, value) => {
     try {
       const rows = toSB(value);
       if (rows.length > 0) {
-        await sb.from(table).upsert(rows).catch(()=>{});
+        await sb.from(table).upsert(rows).catch(e=>console.warn('[SB]',key,e?.message));
       } else {
         // If empty array, could mean deletion — skip for safety
       }
@@ -760,13 +772,20 @@ export default function App(){
     if(!USE_SUPABASE){setAuthLoading(false);return;}
     const init=async()=>{
       const{data:{session}}=await sb.auth.getSession();
-      if(session?.user) await _loginFromSession(session.user);
+      if(session?.user){
+        await _loginFromSession(session.user);
+        // Always re-sync fresh data from Supabase on page load
+        _syncFromSupabase(session.user.id).catch(e=>console.warn('[sync]',e.message));
+      }
       setAuthLoading(false);
     };
     init();
     const{data:{subscription}}=sb.auth.onAuthStateChange(async(event,session)=>{
       if(event==="SIGNED_OUT"){setUser(null);}
-      else if(session?.user) await _loginFromSession(session.user);
+      else if(session?.user){
+        await _loginFromSession(session.user);
+        _syncFromSupabase(session.user.id).catch(()=>{});
+      }
     });
     return()=>subscription.unsubscribe();
   },[]);
@@ -784,7 +803,7 @@ export default function App(){
     });
     setUser(u);
     // Sync all user data to localStorage cache (async, no await)
-    _syncFromSupabase(u.id).catch(()=>{});
+    _syncFromSupabase(u.id).catch(e=>console.warn('[SB]',key,e?.message));
     return u;
   };
 
@@ -899,7 +918,7 @@ function AuthPage({onLogin}){
           }
           const{data:adm}=await sb.from("admins").select("email").eq("email",email.trim()).maybeSingle();
           onLogin({id:data.user.id,name:prof?.name||data.user.email,email:data.user.email,isAdm:data.user.email===FOUNDER||!!adm});
-          _syncFromSupabase(data.user.id).catch(()=>{});
+          _syncFromSupabase(data.user.id).catch(e=>console.warn('[SB]',key,e?.message));
         }
       }
     }catch(e){setErr(e.message||"Erro ao autenticar.");SFX.error();}
