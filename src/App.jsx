@@ -907,6 +907,7 @@ function AuthPage({onLogin}){
           const u=users[te]||users[email.trim()];
           if(!u||u.pass!==pass){safe(()=>{setErr("Credenciais inválidas.");setLoading(false);});SFX.error();return;}
           if(isBanned(u.id)){safe(()=>{setErr("Conta suspensa.");setLoading(false);});return;}
+          safe(()=>setLoading(false));
           onLogin({id:u.id,name:u.name,email:u.email});
         }
         return;
@@ -923,6 +924,8 @@ function AuthPage({onLogin}){
         if(error){safe(()=>{setErr(error.message);setLoading(false);});SFX.error();return;}
         // Create profile
         try{ await sb.from("profiles").upsert({id:data.user.id,name:name.trim(),email:email.trim(),bio:""}); }catch(_){}
+        safe(()=>setLoading(false));
+        SFX.login();
         onLogin({id:data.user.id,name:name.trim(),email:email.trim(),isAdm:false});
 
       }else{
@@ -969,8 +972,10 @@ function AuthPage({onLogin}){
           });
         }catch(_){}
 
-        // Login — this causes component unmount, so do it last
+        // Stop loading BEFORE onLogin (which unmounts this component)
+        safe(()=>setLoading(false));
         const userName=prof.name||sbUser.user_metadata?.name||sbUser.email;
+        SFX.login();
         onLogin({id:sbUser.id,name:userName,email:sbUser.email,isAdm});
 
         // Sync data in background
@@ -979,10 +984,8 @@ function AuthPage({onLogin}){
 
     }catch(e){
       console.error("[Auth]",e);
-      safe(()=>{ setErr(e.message||"Erro ao autenticar."); });
+      safe(()=>{ setErr(e.message||"Erro ao autenticar."); setLoading(false); });
       SFX.error();
-    }finally{
-      safe(()=>setLoading(false));
     }
   };
 
