@@ -158,7 +158,7 @@ const _sbMirror = async (key, value) => {
     const rows = toSB(value);
     if (rows.length > 0) await sb.from(table).upsert(rows);
   }
-  } catch(e) { console.warn('[SB mirror]', key, e?.message); }
+  } catch(e) { if(!e?.message?.includes('409')&&!e?.message?.includes('conflict')) console.warn('[SB mirror]', key, e?.message); }
 };
 
 // Track current user id for profile sync
