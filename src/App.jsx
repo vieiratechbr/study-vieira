@@ -61,7 +61,20 @@ const _sbMirror = async (key, value) => {
   if (!USE_SUPABASE || !sb) return;
   try {
   const uid = _currentUserId;
-  if (!uid && !key.startsWith("sv5_posts") && !key.startsWith("sv5_comm") && !key.startsWith("sv5_bans") && !key.startsWith("sv5_admins")) return;
+  // Only skip if no userId AND it's not a key that has userId embedded in it
+  if (!uid 
+    && !key.startsWith("sv5_posts") 
+    && !key.startsWith("sv5_comm") 
+    && !key.startsWith("sv5_bans") 
+    && !key.startsWith("sv5_admins")
+    && !key.startsWith("sv5_subj_")
+    && !key.startsWith("sv5_cont_")
+    && !key.startsWith("sv5_note_")
+    && !key.startsWith("sv5_prov_")
+    && !key.startsWith("sv5_prof_")
+    && !key.startsWith("sv5_follows")
+    && !key.startsWith("sv5_agenda_")
+  ) return;
 
   // Subject data: sv5_subj_{uid}
   if (key.startsWith("sv5_subj_") && Array.isArray(value)) {
@@ -243,7 +256,14 @@ const seedFounder = () => {
 };
 seedFounder();
 
-const uid = () => Math.random().toString(36).slice(2,10);
+const uid = () => {
+  // Generate proper UUID v4 for Supabase compatibility
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+    const r = Math.random() * 16 | 0;
+    return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
+  });
+};
 const now         = () => Date.now();
 const today       = () => new Date().toISOString().slice(0,10);
 const fmt         = (d) => new Date(d+"T12:00:00").toLocaleDateString("pt-BR",{day:"2-digit",month:"short"});
