@@ -214,9 +214,20 @@ const _syncFromSupabase = async (userId) => {
     // Admins
     const {data:admins} = await sb.from("admins").select("email");
     if(admins) _LS.set(K.admins, admins.map(a=>a.email));
-    // All users (profiles)
+    // All users (profiles) — list for community features
     const {data:profiles} = await sb.from("profiles").select("id,name,email");
     if(profiles){const m={};profiles.forEach(p=>{m[p.email]={id:p.id,name:p.name,email:p.email};});_LS.set(K.users,m);}
+    // Own full profile — avatar, bio, banner, etc.
+    const {data:ownProf} = await sb.from("profiles").select("*").eq("id",userId).maybeSingle();
+    if(ownProf) _LS.set(K.profile(userId),{
+      avatar:ownProf.avatar_url||null,
+      bio:ownProf.bio||"",
+      banner:ownProf.banner||null,
+      bannerImg:ownProf.banner_img||null,
+      gender:ownProf.gender||"Prefiro não dizer",
+      age:ownProf.age||"",
+      course:ownProf.course||""
+    });
     // Community posts
     const {data:cposts} = await sb.from("community_posts").select("*").order("created_at",{ascending:false});
     if(cposts) _LS.set(K.cposts, cposts.map(p=>({id:p.id,communityId:p.community_id,title:p.title,body:p.body,img:p.img,tag:p.tag,pinned:p.pinned,authorName:p.author_name,createdAt:new Date(p.created_at).getTime()})));
