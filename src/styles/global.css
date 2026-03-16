@@ -1,0 +1,99 @@
+/* ─────────────────────────────────────────────────────────────────────────────
+   styles/global.css
+   Estilos base: reset, layout, fundo, animações
+───────────────────────────────────────────────────────────────────────────── */
+
+@import url('https://fonts.googleapis.com/css2?family=Figtree:wght@300;400;500;600;700&display=swap');
+
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+:root {
+  --r: 20px;
+  --blur: 32px;
+}
+
+html, body, #root {
+  height: 100%;
+}
+
+body {
+  font-family: 'Figtree', -apple-system, BlinkMacSystemFont, sans-serif;
+  background: var(--bg);
+  min-height: 100vh;
+  color: var(--t);
+  overflow-x: hidden;
+  transition: background 0.3s, color 0.3s;
+}
+
+/* ── Background mesh ── */
+.mesh {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  transition: background 0.4s;
+  background:
+    radial-gradient(ellipse 800px 500px at 15% 10%, var(--mesh1) 0%, transparent 70%),
+    radial-gradient(ellipse 600px 700px at 85% 85%, var(--mesh2) 0%, transparent 70%),
+    radial-gradient(ellipse 350px 350px at 50% 45%, var(--mesh3) 0%, transparent 70%);
+}
+
+.mesh::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
+  opacity: 0.3;
+}
+
+/* ── App shell ── */
+.app {
+  position: relative;
+  z-index: 1;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.wrap {
+  flex: 1;
+  padding: 20px 18px;
+  max-width: 1100px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.page-center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  padding: 20px;
+}
+
+/* ── Animations ── */
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: none; }
+}
+.fu { animation: fadeUp 0.3s cubic-bezier(.22,1,.36,1) both; }
+
+@keyframes scaleIn {
+  from { opacity: 0; transform: scale(0.97); }
+  to   { opacity: 1; transform: scale(1); }
+}
+.si { animation: scaleIn 0.25s cubic-bezier(.22,1,.36,1) both; }
+
+/* ── Scrollbar ── */
+::-webkit-scrollbar { width: 5px; }
+::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.09); border-radius: 3px; }
+
+/* ── Responsive ── */
+@media (max-width: 720px) {
+  .hgrid { grid-template-columns: 1fr !important; }
+  .fr    { grid-template-columns: 1fr !important; }
+}
