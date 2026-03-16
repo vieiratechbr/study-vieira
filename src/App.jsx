@@ -59,6 +59,7 @@ const DB = {
 // Async mirror — called after every DB.set
 const _sbMirror = async (key, value) => {
   if (!USE_SUPABASE || !sb) return;
+  try {
   const uid = _currentUserId;
   if (!uid && !key.startsWith("sv5_posts") && !key.startsWith("sv5_comm") && !key.startsWith("sv5_bans") && !key.startsWith("sv5_admins")) return;
 
@@ -70,7 +71,7 @@ const _sbMirror = async (key, value) => {
         id:s.id, user_id:userId, name:s.name, description:s.desc||null,
         color_id:s.color?.id, color_dot:s.color?.dot, color_glow:s.color?.glow, color_tint:s.color?.tint,
         category:s.cat||"faculdade"
-      }).catch(e=>console.warn('[SB]',e?.message));
+      });
     }
     return;
   }
@@ -82,7 +83,7 @@ const _sbMirror = async (key, value) => {
       await sb.from("contents").upsert({
         id:c.id, subject_id:sid, title:c.title, type:c.type||"aula",
         date:c.date||null, description:c.desc||null, done:!!c.done
-      }).catch(e=>console.warn('[SB]',e?.message));
+      });
     }
     return;
   }
@@ -91,7 +92,7 @@ const _sbMirror = async (key, value) => {
   if (key.startsWith("sv5_note_") && Array.isArray(value)) {
     const parts = key.split("_"); const sid = parts[parts.length-1];
     for (const n of value) {
-      await sb.from("notes").upsert({ id:n.id, subject_id:sid, title:n.title, body:n.body||null }).catch(e=>console.warn('[SB]',e?.message));
+      await sb.from("notes").upsert({ id:n.id, subject_id:sid, title:n.title, body:n.body||null });
     }
     return;
   }
@@ -103,7 +104,7 @@ const _sbMirror = async (key, value) => {
       await sb.from("provas").upsert({
         id:p.id, subject_id:sid, title:p.title, date:p.date,
         weight:p.weight||null, notes:p.notes||null, grade:p.grade||null
-      }).catch(e=>console.warn('[SB]',e?.message));
+      });
     }
     return;
   }
@@ -121,7 +122,7 @@ const _sbMirror = async (key, value) => {
         bio: value.bio||null, avatar_url: value.avatar||null,
         banner: value.banner||null, banner_img: value.bannerImg||null,
         gender: value.gender||null, age: value.age||null, course: value.course||null
-      }).catch(e=>console.warn('[SB]',e?.message));
+      });
     }
     return;
   }
@@ -132,7 +133,7 @@ const _sbMirror = async (key, value) => {
       await sb.from("community_posts").upsert({
         id:p.id, community_id:p.communityId, title:p.title||null, body:p.body||null,
         img:p.img||null, tag:p.tag, pinned:!!p.pinned, author_name:p.authorName
-      }).catch(e=>console.warn('[SB] cposts',e?.message));
+      });
     }
     return;
   }
@@ -141,15 +142,10 @@ const _sbMirror = async (key, value) => {
   const mapEntry = Object.entries(_SB_MAP).find(([k])=>key===k);
   if (mapEntry && Array.isArray(value)) {
     const [, {table, toSB}] = mapEntry;
-    try {
-      const rows = toSB(value);
-      if (rows.length > 0) {
-        await sb.from(table).upsert(rows).catch(e=>console.warn('[SB]',e?.message));
-      } else {
-        // If empty array, could mean deletion — skip for safety
-      }
-    } catch {}
+    const rows = toSB(value);
+    if (rows.length > 0) await sb.from(table).upsert(rows);
   }
+  } catch(e) { console.warn('[SB mirror]', key, e?.message); }
 };
 
 // Track current user id for profile sync
@@ -799,7 +795,7 @@ export default function App(){
     // Cache profile to localStorage so components work unchanged
     // Create profile row if missing
     if(!prof){
-      await sb.from("profiles").upsert({id:sbUser.id,name:sbUser.user_metadata?.name||sbUser.email.split("@")[0],email:sbUser.email,bio:""}).catch(()=>{});
+      try{await sb.from("profiles").upsert({id:sbUser.id,name:sbUser.user_metadata?.name||sbUser.email.split("@")[0],email:sbUser.email,bio:""});}catch(_){}
     }
     const profData=prof||{};
     _LS.set(K.profile(u.id),{
@@ -914,7 +910,7 @@ function AuthPage({onLogin}){
           if(pass.length<6){setErr("Senha precisa ter ao menos 6 caracteres.");setLoading(false);return;}
           const{data,error}=await sb.auth.signUp({email:email.trim(),password:pass,options:{data:{name:name.trim()}}});
           if(error){setErr(error.message);SFX.error();setLoading(false);return;}
-          await sb.from("profiles").upsert({id:data.user.id,name:name.trim(),email:email.trim(),bio:""}).catch(()=>{});
+          try{await sb.from("profiles").upsert({id:data.user.id,name:name.trim(),email:email.trim(),bio:""});}catch(_){}
           onLogin({id:data.user.id,name:name.trim(),email:email.trim(),isAdm:false});
         }else{
           if(!email.trim()||!pass.trim()){setErr("Preencha e-mail e senha.");SFX.error();setLoading(false);return;}
@@ -923,17 +919,18 @@ function AuthPage({onLogin}){
           if(error){setErr(error.message);SFX.error();setLoading(false);return;}
           const sbUser=data.user;
           // Step 2: get profile (don't throw if missing)
-          const{data:prof}=await sb.from("profiles").select("*").eq("id",sbUser.id).maybeSingle().catch(()=>({data:null}));
-          // Step 3: check ban
-          const{data:ban}=await sb.from("bans").select("*").eq("user_id",sbUser.id).maybeSingle().catch(()=>({data:null}));
+          let prof=null,ban=null,admRow=null;
+          try{({data:prof}=await sb.from("profiles").select("*").eq("id",sbUser.id).maybeSingle());}catch(_){}
+          try{({data:ban}=await sb.from("bans").select("*").eq("user_id",sbUser.id).maybeSingle());}catch(_){}
           if(ban&&!(ban.expires_at&&new Date(ban.expires_at)<new Date())){
             await sb.auth.signOut();setErr("Conta suspensa: "+(ban.reason||""));setLoading(false);return;
           }
           // Step 4: check admin
-          const isAdm=sbUser.email===FOUNDER||(await sb.from("admins").select("email").eq("email",sbUser.email).maybeSingle().catch(()=>({data:null}))).data!==null;
+          try{({data:admRow}=await sb.from("admins").select("email").eq("email",sbUser.email).maybeSingle());}catch(_){}
+          const isAdm=sbUser.email===FOUNDER||admRow!==null;
           // Step 5: create profile if missing (e.g. admin created via Supabase dashboard)
           if(!prof){
-            await sb.from("profiles").upsert({id:sbUser.id,name:sbUser.email.split("@")[0],email:sbUser.email,bio:""}).catch(()=>{});
+            try{await sb.from("profiles").upsert({id:sbUser.id,name:sbUser.user_metadata?.name||sbUser.email.split("@")[0],email:sbUser.email,bio:""});}catch(_){}
           }
           // Cache profile locally
           const profData=prof||{};
