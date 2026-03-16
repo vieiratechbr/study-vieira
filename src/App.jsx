@@ -2232,13 +2232,31 @@ function ProfileTab({user,setUser}){
   const [name,setName]=useState(user.name);
   const [bio,setBio]=useState(prof.bio||"");
   const [avatar,setAvatar]=useState(prof.avatar||"");
-  const [cropSrc,setCropSrc]=useState(null);  // imagem para cortar
+  const [cropSrc,setCropSrc]=useState(null);
   const [banner,setBanner]=useState(prof.banner||BANNER_PRESETS[user.id.charCodeAt(0)%BANNER_PRESETS.length]);
   const [bannerImg,setBannerImg]=useState(prof.bannerImg||null);
   const [gender,setGender]=useState(prof.gender||"Prefiro não dizer");
   const [age,setAge]=useState(prof.age||"");
   const [course,setCourse]=useState(prof.course||"");
   const [ok,setOk]=useState("");
+
+  // Re-read profile from Supabase on mount to get fresh data
+  useEffect(()=>{
+    if(!USE_SUPABASE||!sb)return;
+    sb.from("profiles").select("*").eq("id",user.id).maybeSingle().then(({data:p})=>{
+      if(!p)return;
+      const fresh={avatar:p.avatar_url||null,bio:p.bio||"",banner:p.banner||null,bannerImg:p.banner_img||null,gender:p.gender||"Prefiro não dizer",age:p.age||"",course:p.course||""};
+      _LS.set(K.profile(user.id),fresh);
+      setProf(fresh);
+      setBio(fresh.bio);
+      setAvatar(fresh.avatar||"");
+      setBanner(fresh.banner||BANNER_PRESETS[user.id.charCodeAt(0)%BANNER_PRESETS.length]);
+      setBannerImg(fresh.bannerImg||null);
+      setGender(fresh.gender);
+      setAge(fresh.age);
+      setCourse(fresh.course);
+    }).catch(()=>{});
+  },[user.id]);
   const avatarFileRef=useRef(null);
   const bannerFileRef=useRef(null);
 
