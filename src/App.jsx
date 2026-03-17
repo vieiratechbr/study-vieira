@@ -1947,7 +1947,7 @@ function CommunityTab({user,viewUser,setViewUser}){
         ...(viewUser?[{k:"profile",l:"👤 Perfil"}]:[])
       ].map(t=><button key={t.k} className={`stab ${sub===t.k?"on":""}`} onClick={()=>setSub(t.k)}>{t.l}</button>)}
     </div>
-    {sub==="people"   &&<PeopleTab    user={user} setViewUser={setViewUser} setSub={setSub}/>}
+    {sub==="people"   &&<PeopleTab    user={user}/>}
     {sub==="mycomms"  &&<MyCommsTab   user={user}/>}
     {sub==="allcomms" &&<AllCommsTab  user={user}/>}
     {sub==="friends"  &&<FriendsTab   user={user} setViewUser={setViewUser} setSub={setSub}/>}
@@ -1956,17 +1956,110 @@ function CommunityTab({user,viewUser,setViewUser}){
   </div>);
 }
 
-function PeopleTab({user,setViewUser,setSub}){
+function PeopleTab({user}){
   const [search,setSearch]=useState("");
-  const allUsers=DB.get(K.users)||{};
-  const others=Object.values(allUsers).filter(u=>u.id!==user.id);
-  const filtered=others.filter(u=>!search||(u.name+u.email).toLowerCase().includes(search.toLowerCase()));
+  const [results,setResults]=useState([]);
+  const [loading,setLoading]=useState(false);
+  const [selected,setSelected]=useState(null); // user to show in popup
+  const searchRef=useRef(null);
+
+  // Debounced search — queries Supabase directly
+  useEffect(()=>{
+    if(!search.trim()){setResults([]);return;}
+    const timer=setTimeout(async()=>{
+      setLoading(true);
+      try{
+        if(USE_SUPABASE&&sb){
+          const q=search.trim().toLowerCase();
+          const{data}=await sb.from("profiles")
+            .select("id,name,email,bio,avatar_url,course")
+            .neq("id",user.id)
+            .or(`name.ilike.%${q}%,email.ilike.%${q}%`)
+            .limit(20);
+          setResults(data||[]);
+        }else{
+          // localStorage fallback
+          const all=Object.values(DB.get(K.users)||{}).filter(u=>u.id!==user.id);
+          const q=search.toLowerCase();
+          setResults(all.filter(u=>(u.name+u.email).toLowerCase().includes(q)));
+        }
+      }catch(e){console.warn("[search]",e.message);}
+      finally{setLoading(false);}
+    },350);
+    return()=>clearTimeout(timer);
+  },[search]);
+
   return(<div>
-    <div className="fg" style={{marginBottom:14}}><input className="inp" placeholder="Buscar pessoas..." value={search} onChange={e=>setSearch(e.target.value)}/></div>
-    {filtered.length===0?<G><div className="empty"><div style={{fontSize:32,marginBottom:8}}>👥</div><p>{search?"Nenhum resultado":"Nenhum outro usuário"}</p></div></G>
-      :filtered.map(u=><UserCard key={u.id} u={u} me={user} onView={()=>{setViewUser(u.id);setSub("profile");}}/>)}
+    {/* Search bar */}
+    <div className="fg" style={{marginBottom:8}}>
+      <input ref={searchRef} className="inp"
+        placeholder="🔍 Buscar por nome ou e-mail..."
+        value={search} onChange={e=>setSearch(e.target.value)}
+        autoComplete="off"/>
+    </div>
+
+    {/* States */}
+    {!search.trim()&&(
+      <G><div className="empty">
+        <div style={{fontSize:32,marginBottom:8}}>🔍</div>
+        <p style={{fontWeight:500}}>Busque por pessoas</p>
+        <p style={{fontSize:12,color:"var(--t3)",marginTop:4}}>Digite um nome ou e-mail para encontrar alguém</p>
+      </div></G>
+    )}
+
+    {search.trim()&&loading&&(
+      <G><div className="empty"><div style={{fontSize:24,marginBottom:8}}>⏳</div><p>Buscando...</p></div></G>
+    )}
+
+    {search.trim()&&!loading&&results.length===0&&(
+      <G><div className="empty">
+        <div style={{fontSize:32,marginBottom:8}}>😕</div>
+        <p>Nenhum usuário encontrado</p>
+        <p style={{fontSize:12,color:"var(--t3)",marginTop:4}}>Tente outro nome ou e-mail</p>
+      </div></G>
+    )}
+
+    {/* Results */}
+    {results.length>0&&(
+      <div style={{display:"flex",flexDirection:"column",gap:6}}>
+        {results.map(u=>(
+          <div key={u.id} className="user-row" style={{cursor:"pointer"}} onClick={()=>setSelected(u)}>
+            <Av src={u.avatar_url} name={u.name} size={42}/>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{fontSize:14,fontWeight:600}}>{u.name}</div>
+              {u.course&&<div style={{fontSize:12,color:"var(--t2)",marginTop:1}}>{u.course}</div>}
+            </div>
+            <div style={{fontSize:12,color:"var(--t3)"}}>Ver perfil →</div>
+          </div>
+        ))}
+      </div>
+    )}
+
+    {/* Profile popup */}
+    {selected&&(
+      <Modal onClose={()=>setSelected(null)}>
+        <G cls="mp si" style={{maxWidth:420,padding:0,overflow:"hidden"}}>
+          {/* Mini profile card */}
+          <div style={{height:80,background:"linear-gradient(135deg,rgba(125,211,252,0.15),rgba(196,181,253,0.1))",borderRadius:"var(--r) var(--r) 0 0"}}/>
+          <div style={{padding:"0 20px 24px",marginTop:-30}}>
+            <Av src={selected.avatar_url} name={selected.name} size={60}
+              style={{border:"3px solid var(--bg,#1c1c1e)",boxShadow:"0 4px 12px rgba(0,0,0,0.3)"}}/>
+            <div style={{marginTop:10}}>
+              <div style={{fontSize:18,fontWeight:700,letterSpacing:-.3}}>{selected.name}</div>
+              {selected.course&&<div style={{fontSize:13,color:"var(--t2)",marginTop:2}}>{selected.course}</div>}
+              {selected.bio&&<div style={{fontSize:13,color:"var(--t2)",marginTop:8,lineHeight:1.5}}>{selected.bio}</div>}
+            </div>
+            {/* Follow button */}
+            <FollowBtn me={user} theirId={selected.id} style={{marginTop:16,width:"100%"}}/>
+            <button className="btn btn-g" style={{width:"100%",marginTop:8}}
+              onClick={()=>setSelected(null)}>Fechar</button>
+          </div>
+        </G>
+      </Modal>
+    )}
   </div>);
 }
+
 
 function MyCommsTab({user}){
   const myIds=getUserComms(user.id);
@@ -2040,6 +2133,24 @@ function FriendsTab({user,setViewUser,setSub}){
     {friendUsers.length===0?<G><div className="empty"><div style={{fontSize:32,marginBottom:8}}>🤝</div><p style={{fontWeight:500}}>Nenhum amigo ainda</p><p style={{fontSize:13,color:"var(--t3)",marginTop:6}}>Quando você e alguém se seguirem mutuamente, viram amigos</p></div></G>
       :friendUsers.map(u=><UserCard key={u.id} u={u} me={user} onView={()=>{setViewUser(u.id);setSub("profile");}}/>)}
   </div>);
+}
+
+function FollowBtn({me,theirId,style={}}){
+  const [following,setFollowing]=useState(()=>isFollowing(me.id,theirId));
+  const [theyFollow,setTheyFollow]=useState(()=>isFollowing(theirId,me.id));
+  const mutual=following&&theyFollow;
+  const toggle=async()=>{
+    await toggleFollow(me.id,theirId);
+    setFollowing(f=>!f);SFX.follow();
+  };
+  return(
+    <button
+      className={`btn ${following?"btn-unfollow":"btn-follow"}`}
+      style={{...style}}
+      onClick={e=>{e.stopPropagation();toggle();}}>
+      {following?(mutual?"✓ Amigos":"✓ Seguindo"):"+ Seguir"}
+    </button>
+  );
 }
 
 function UserCard({u,me,onView}){
