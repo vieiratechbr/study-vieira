@@ -3409,7 +3409,7 @@ function AdminFeedback(){
 //  APOIE-NOS — Buy Me a Coffee
 // ══════════════════════════════════════════════════════════════════════════════
 function SupportTab(){
-  const BMC_USER = "studyvieira"; // ← troca pelo seu usuário do Buy Me a Coffee
+  const BMC_USER = "vieiratechbr"; // ← troca pelo seu usuário do Buy Me a Coffee
 
   return(<div className="fu">
     <G style={{padding:28,maxWidth:500,margin:"0 auto",textAlign:"center"}}>
