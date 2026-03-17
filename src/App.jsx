@@ -1062,7 +1062,7 @@ function AuthPage({onLogin}){
 function NavBar({user,tab,setTab,onLogout,dark,toggleTheme}){
   const admin=isAdmin(user);
   const prof=getProfile(user.id);
-  const navTabs=[{k:"home",l:"Início"},{k:"materias",l:"Matérias"},{k:"agenda",l:"Agenda"},{k:"comunidade",l:"Comunidade"},{k:"feedback",l:"📬 Feedback"}];
+  const navTabs=[{k:"home",l:"Início"},{k:"materias",l:"Matérias"},{k:"agenda",l:"Agenda"},{k:"comunidade",l:"Comunidade"},{k:"feedback",l:"Feedback"}];
   return(<nav className="nav">
     {/* Logo */}
     <div className="nlogo" onClick={()=>setTab("home")}>◈ <span style={{fontWeight:700}}>Study</span><span style={{color:"var(--t2)",fontWeight:400}}> Vieira</span></div>
@@ -1114,6 +1114,7 @@ function AdminTab({user,refreshUser}){
     {k:"comms",   l:"🏫 Comunidades"},
     {k:"users",   l:"👥 Usuários & Punições"},
     {k:"admins",  l:"⭐ Administradores"},
+    {k:"feedback",l:"📬 Feedbacks"},
   ];
   return(<div className="fu">
     <div style={{marginBottom:18}}>
@@ -1129,7 +1130,8 @@ function AdminTab({user,refreshUser}){
     {sub==="avisos" &&<AdminPosts     user={user}/>}
     {sub==="comms"  &&<AdminComms     user={user}/>}
     {sub==="users"  &&<AdminUsers     user={user}/>}
-    {sub==="admins" &&<AdminAdmins    user={user}/>}
+    {sub==="admins"   &&<AdminAdmins    user={user}/>}
+    {sub==="feedback" &&<AdminFeedback  user={user}/>}
   </div>);
 }
 
@@ -3048,26 +3050,100 @@ function FeedbackTab({user}){
         </button>
       </div>
 
-      <div style={{marginTop:24,padding:"16px",borderRadius:12,background:"var(--card-bg)",border:"1px solid var(--b2)"}}>
-        <div style={{fontSize:12,color:"var(--t2)",marginBottom:8,fontWeight:600}}>Outros canais</div>
-        <div style={{display:"flex",gap:10,flexWrap:"wrap"}}>
-          <a href="https://wa.me/551194398317?text=Olá!%20Tenho%20um%20feedback%20sobre%20o%20Study%20Vieira"
-            target="_blank" rel="noopener noreferrer"
-            style={{display:"inline-flex",alignItems:"center",gap:6,padding:"7px 14px",borderRadius:10,
-              background:"rgba(134,239,172,0.12)",border:"1px solid rgba(134,239,172,0.25)",
-              color:"#86efac",fontSize:12,fontWeight:500,textDecoration:"none"}}>
-            📱 WhatsApp
-          </a>
-          <a href="mailto:nathanvieiragg@outlook.com?subject=Feedback Study Vieira"
-            target="_blank" rel="noopener noreferrer"
-            style={{display:"inline-flex",alignItems:"center",gap:6,padding:"7px 14px",borderRadius:10,
-              background:"rgba(125,211,252,0.12)",border:"1px solid rgba(125,211,252,0.25)",
-              color:"#7dd3fc",fontSize:12,fontWeight:500,textDecoration:"none"}}>
-            📧 E-mail
-          </a>
-        </div>
-      </div>
+
     </G>
+  </div>);
+}
+
+
+// ── Admin: Feedbacks ─────────────────────────────────────────────────────────
+function AdminFeedback(){
+  const [items,setItems]=useState([]);
+  const [loading,setLoading]=useState(true);
+  const [filter,setFilter]=useState("todos");
+  const [open,setOpen]=useState(null);
+
+  useEffect(()=>{
+    const load=async()=>{
+      if(USE_SUPABASE&&sb){
+        try{
+          const{data}=await sb.from("feedback").select("*").order("created_at",{ascending:false});
+          if(data)setItems(data);
+        }catch(e){console.warn("[SB] feedback",e.message);}
+      }
+      setLoading(false);
+    };
+    load();
+  },[]);
+
+  const TYPE_COLORS={"sugestao":"#7dd3fc","bug":"#fda4af","elogio":"#fcd34d","outro":"#c4b5fd"};
+  const TYPE_LABELS={"sugestao":"💡 Sugestão","bug":"🐛 Bug","elogio":"⭐ Elogio","outro":"💬 Outro"};
+
+  const filtered=filter==="todos"?items:items.filter(i=>i.type===filter);
+
+  const del=async(id)=>{
+    if(!USE_SUPABASE)return;
+    try{await sb.from("feedback").delete().eq("id",id);}catch(_){}
+    setItems(v=>v.filter(i=>i.id!==id));
+    setOpen(null);
+  };
+
+  return(<div>
+    <div className="sh">
+      <h2 style={{fontSize:15,color:"var(--t2)"}}>Feedbacks dos usuários</h2>
+      <div style={{fontSize:13,color:"var(--t2)"}}>{items.length} total</div>
+    </div>
+
+    {/* Filter tabs */}
+    <div className="stabs" style={{marginBottom:16}}>
+      {["todos","sugestao","bug","elogio","outro"].map(f=>(
+        <button key={f} className={`stab ${filter===f?"on":""}`} onClick={()=>setFilter(f)}>
+          {f==="todos"?"🗂 Todos":TYPE_LABELS[f]}
+        </button>
+      ))}
+    </div>
+
+    {loading
+      ?<G><div className="empty"><div style={{fontSize:24,marginBottom:8}}>⏳</div><p>Carregando...</p></div></G>
+      :filtered.length===0
+        ?<G><div className="empty"><div style={{fontSize:32,marginBottom:8}}>📭</div>
+          <p>{filter==="todos"?"Nenhum feedback ainda":"Nenhum feedback desse tipo"}</p></div></G>
+        :<div style={{display:"flex",flexDirection:"column",gap:8}}>
+          {filtered.map(item=>{
+            const tc=TYPE_COLORS[item.type]||"#cbd5e1";
+            const tl=TYPE_LABELS[item.type]||item.type;
+            return(
+              <div key={item.id} onClick={()=>setOpen(open?.id===item.id?null:item)}
+                style={{padding:"14px 16px",borderRadius:13,background:"var(--card-bg)",
+                  border:`1px solid ${open?.id===item.id?tc+"50":"var(--b2)"}`,
+                  cursor:"pointer",transition:"all .18s"}}>
+                <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:6}}>
+                  <span style={{padding:"2px 10px",borderRadius:20,fontSize:11,fontWeight:600,
+                    background:`${tc}20`,color:tc,border:`1px solid ${tc}40`}}>{tl}</span>
+                  <span style={{fontSize:12,fontWeight:600,color:"var(--t)"}}>{item.user_name}</span>
+                  <span style={{fontSize:11,color:"var(--t3)"}}>{item.user_email}</span>
+                  <span style={{fontSize:11,color:"var(--t3)",marginLeft:"auto"}}>
+                    {new Date(item.created_at).toLocaleDateString("pt-BR",{day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit"})}
+                  </span>
+                </div>
+                <div style={{fontSize:13,color:"var(--t2)",lineHeight:1.6,
+                  overflow:"hidden",maxHeight:open?.id===item.id?"none":"2.4em",
+                  WebkitLineClamp:open?.id===item.id?undefined:2,
+                  display:"-webkit-box",WebkitBoxOrient:"vertical"}}>
+                  {item.message}
+                </div>
+                {open?.id===item.id&&(
+                  <div style={{marginTop:12,display:"flex",justifyContent:"flex-end"}}>
+                    <button className="btn btn-del btn-sm" onClick={e=>{e.stopPropagation();del(item.id);}}>
+                      🗑 Apagar
+                    </button>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+    }
   </div>);
 }
 
