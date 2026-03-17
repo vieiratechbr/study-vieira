@@ -630,28 +630,92 @@ body{font-family:'Figtree',-apple-system,sans-serif;background:var(--bg);min-hei
 /* ── Heatmap ── */
 .heat-cell{width:12px;height:12px;border-radius:2px;transition:background .2s;}
 @keyframes fu{from{opacity:0;transform:translateY(10px);}to{opacity:1;transform:none;}}
+/* ── Hamburger menu ── */
+.hamburger{display:none;flex-direction:column;gap:5px;cursor:pointer;padding:8px;border-radius:8px;background:none;border:none;transition:background .18s;}
+.hamburger:hover{background:var(--card-bg);}
+.hamburger span{display:block;width:20px;height:2px;background:var(--t);border-radius:2px;transition:all .25s cubic-bezier(.22,1,.36,1);}
+.hamburger.open span:nth-child(1){transform:translateY(7px) rotate(45deg);}
+.hamburger.open span:nth-child(2){opacity:0;transform:scaleX(0);}
+.hamburger.open span:nth-child(3){transform:translateY(-7px) rotate(-45deg);}
+/* Slide-in menu */
+.mobile-menu{
+  position:fixed;top:0;right:-100%;width:75%;max-width:280px;height:100vh;
+  z-index:500;background:var(--nav-bg);backdrop-filter:blur(40px);
+  border-left:1px solid var(--b2);
+  display:flex;flex-direction:column;
+  padding:80px 20px 40px;gap:6px;
+  transition:right .3s cubic-bezier(.22,1,.36,1);
+  overflow-y:auto;
+}
+.mobile-menu.open{right:0;}
+.mobile-menu-overlay{
+  position:fixed;inset:0;z-index:499;background:rgba(0,0,0,0.5);
+  opacity:0;pointer-events:none;transition:opacity .3s;
+}
+.mobile-menu-overlay.open{opacity:1;pointer-events:auto;}
+.mobile-menu-item{
+  display:flex;align-items:center;gap:12px;padding:13px 16px;
+  border-radius:12px;cursor:pointer;transition:all .18s;
+  font-size:15px;font-weight:500;color:var(--t2);
+  border:none;background:none;font-family:inherit;text-align:left;
+}
+.mobile-menu-item:hover,.mobile-menu-item.active{background:var(--card-bg);color:var(--t);}
+.mobile-menu-item.active{border:1px solid var(--b);}
+.mobile-menu-icon{font-size:20px;width:28px;text-align:center;}
+
+/* ── Hamburger menu ── */
+.ham-menu{
+  display:none;position:fixed;top:0;right:0;bottom:0;z-index:1000;
+  width:min(280px,85vw);background:var(--nav-bg);
+  backdrop-filter:blur(40px);border-left:1px solid var(--nav-border);
+  flex-direction:column;padding:20px 0;overflow-y:auto;
+  animation:slideInRight .25s cubic-bezier(.22,1,.36,1);
+}
+@keyframes slideInRight{from{transform:translateX(100%);}to{transform:none;}}
+.ham-overlay{
+  display:none;position:fixed;inset:0;z-index:999;
+  background:rgba(0,0,0,0.5);backdrop-filter:blur(4px);
+}
+.ham-item{
+  display:flex;align-items:center;gap:12px;padding:14px 24px;
+  font-size:15px;font-weight:500;color:var(--t2);cursor:pointer;
+  transition:all .18s;border:none;background:none;font-family:inherit;width:100%;text-align:left;
+  border-left:3px solid transparent;
+}
+.ham-item:active{background:var(--card-hover);}
+.ham-item.active{color:var(--t);background:var(--card-bg);border-left-color:var(--t);}
+.ham-icon{font-size:20px;width:28px;text-align:center;flex-shrink:0;}
+.ham-divider{height:1px;background:var(--b2);margin:8px 16px;}
+/* Hamburger button */
+.hamburger{
+  display:none;flex-direction:column;gap:4px;padding:7px;
+  background:rgba(255,255,255,0.06);border:1px solid var(--b2);
+  border-radius:9px;cursor:pointer;align-items:center;justify-content:center;
+  width:34px;height:34px;flex-shrink:0;
+}
+.hamburger span{
+  width:16px;height:2px;background:var(--t);border-radius:2px;
+  transition:transform .22s ease,opacity .22s ease;display:block;
+}
 /* ── Bottom nav for mobile ── */
 .bottom-nav{display:none;}
-@media(max-width:480px){
-  .bottom-nav{
-    display:flex;position:fixed;bottom:0;left:0;right:0;z-index:200;
-    background:var(--nav-bg);backdrop-filter:blur(20px);
-    border-top:1px solid var(--nav-border);
-    padding:6px 0 max(6px,env(safe-area-inset-bottom));
-  }
-  .bottom-nav-item{
-    flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;
-    padding:4px 2px;cursor:pointer;transition:all .18s;border:none;background:none;font-family:inherit;
-  }
-  .bottom-nav-icon{font-size:20px;line-height:1;}
-  .bottom-nav-label{font-size:9px;font-weight:500;color:var(--t3);transition:color .18s;}
-  .bottom-nav-item.active .bottom-nav-label{color:var(--t);}
-  .bottom-nav-item.active .bottom-nav-icon{filter:drop-shadow(0 0 6px rgba(255,255,255,0.4));}
-  /* Add bottom padding to main content so it doesn't hide behind bottom nav */
-  .wrap{padding-bottom:70px!important;}
-  /* Hide top nav tabs on mobile (use bottom nav instead) */
-  .nav>div:first-of-type .nav-tab{display:none;}
-}
+/* Hamburger menu */
+.hamburger{display:none;flex-direction:column;gap:5px;cursor:pointer;padding:6px;border-radius:8px;border:none;background:none;}
+.hamburger:hover{background:var(--card-bg);}
+.hamburger span{display:block;width:20px;height:2px;background:var(--t);border-radius:2px;transition:all .25s;}
+.hamburger.open span:nth-child(1){transform:translateY(7px) rotate(45deg);}
+.hamburger.open span:nth-child(2){opacity:0;}
+.hamburger.open span:nth-child(3){transform:translateY(-7px) rotate(-45deg);}
+.drawer{position:fixed;inset:0;z-index:300;pointer-events:none;}
+.drawer-overlay{position:absolute;inset:0;background:rgba(0,0,0,0);transition:background .3s;pointer-events:none;}
+.drawer.open .drawer-overlay{background:rgba(0,0,0,0.55);pointer-events:auto;backdrop-filter:blur(4px);}
+.drawer-panel{position:absolute;top:0;right:-280px;width:260px;height:100%;background:var(--nav-bg);backdrop-filter:blur(40px);border-left:1px solid var(--b2);transition:right .3s cubic-bezier(.22,1,.36,1);display:flex;flex-direction:column;padding:0;}
+.drawer.open .drawer-panel{right:0;}
+.drawer-header{padding:16px 20px;border-bottom:1px solid var(--b2);display:flex;align-items:center;justify-content:space-between;}
+.drawer-nav-item{display:flex;align-items:center;gap:12px;padding:14px 20px;cursor:pointer;transition:background .18s;border:none;background:none;font-family:inherit;width:100%;text-align:left;font-size:15px;font-weight:500;color:var(--t);}
+.drawer-nav-item:hover{background:var(--card-bg);}
+.drawer-nav-item.active{background:var(--s2,rgba(255,255,255,0.1));color:var(--t);}
+.drawer-nav-item .nav-icon{font-size:20px;width:28px;text-align:center;}
 .fu{animation:fu .3s cubic-bezier(.22,1,.36,1) both;}
 @keyframes si{from{opacity:0;transform:scale(.97);}to{opacity:1;transform:scale(1);}}
 .si{animation:si .25s cubic-bezier(.22,1,.36,1) both;}
@@ -669,51 +733,58 @@ body{font-family:'Figtree',-apple-system,sans-serif;background:var(--bg);min-hei
 
 /* ── MOBILE (≤480px) ── */
 @media(max-width:480px){
-  /* Nav */
-  .nav{padding:8px 12px;gap:2px;flex-wrap:nowrap;}
-  .nlogo{font-size:13px;padding:5px 6px;margin-right:4px;}
-  .nlogo span:last-child{display:none;}
-  .nav-tab{padding:6px 8px;font-size:11px;}
-  .nav-right{gap:5px;}
-  .btn-ico{width:28px;height:28px;}
+  /* Nav — hide tabs, show hamburger */
+  .nav>div:first-of-type{display:none!important;}
+  .hamburger{display:flex!important;}
+  .nav{padding:8px 12px;gap:6px;}
+  .nlogo{font-size:14px;padding:5px 8px;margin-right:0;}
+  .nav-tab{display:none!important;}
+  .nav-right{gap:6px;margin-left:auto;}
+  .btn-ico{width:30px;height:30px;font-size:14px;}
 
   /* Layout */
-  .wrap{padding:12px 10px;}
-  .hgrid{grid-template-columns:1fr;gap:12px;}
+  .wrap{padding:12px 10px 80px!important;}
+  .hgrid{grid-template-columns:1fr!important;gap:12px;}
+  .hleft{gap:12px;}
+  .hright{position:static!important;}
   .fr{grid-template-columns:1fr!important;}
   .g2{grid-template-columns:1fr 1fr;gap:8px;}
   .g3{grid-template-columns:1fr;gap:10px;}
-  .stabs{flex-wrap:wrap;gap:4px;}
-  .stab{padding:6px 10px;font-size:12px;}
+
+  /* Sub-tabs */
+  .stabs{flex-wrap:wrap;gap:3px;width:100%;}
+  .stab{padding:6px 10px;font-size:11px;flex:1;text-align:center;}
 
   /* Cards */
   .glass{border-radius:14px;}
-  .mp{padding:18px;}
-  .mo-inner{padding:16px 10px 40px;}
+  .mp{padding:16px;}
+  .mo-inner{padding:14px 10px 50px;}
+
+  /* Home — feed below calendar, reasonable height */
+  .feed-wrap{height:320px;min-height:280px;}
+  .feed-title{font-size:15px;}
+  .feed-content{padding:12px 12px 14px;}
 
   /* Profile */
-  .prof-banner{height:100px;}
+  .prof-banner{height:90px;}
   .prof-stats{grid-template-columns:repeat(3,1fr);}
   .prof-stat{padding:10px 4px;}
-  .prof-stat-n{font-size:17px;}
-  .prof-stat-l{font-size:10px;}
+  .prof-stat-n{font-size:16px;}
+  .prof-stat-l{font-size:9px;letter-spacing:0;}
 
-  /* Feed */
-  .feed-wrap{height:calc(100vh - 220px);min-height:320px;}
-  .feed-title{font-size:15px;}
-  .feed-content{padding:14px 14px 16px;}
-
-  /* Home grid */
-  .hgrid{gap:10px;}
+  /* Typography */
+  h1{font-size:18px!important;letter-spacing:-.3px!important;}
+  h2{font-size:15px!important;}
+  .sh h2{font-size:15px;}
+  .sh{margin-bottom:10px;}
 
   /* Buttons */
   .btn{padding:8px 14px;font-size:12px;}
-  .btn-sm{padding:5px 10px;font-size:11px;}
+  .btn-sm{padding:5px 9px;font-size:11px;}
+  .btn-f{padding:10px 18px;}
 
-  /* Typography */
-  h1{font-size:18px!important;}
-  h2{font-size:15px!important;}
-  .sh h2{font-size:15px;}
+  /* Modal */
+  .post-detail-img{max-height:200px;}
 }
 
 /* ── VERY SMALL (≤360px) ── */
@@ -1007,6 +1078,7 @@ export default function App(){
           {tab==="perfil"    &&<div key="p" className="page-enter"><ProfileTab    user={user} setUser={(u)=>{DB.set(K.session,u);setUser(u);}}/></div>}
           {tab==="admin"     &&<div key="ad" className="page-enter"><AdminTab      user={user} refreshUser={refreshUser}/></div>}
           {tab==="feedback"  &&<div key="fb" className="page-enter"><FeedbackTab   user={user}/></div>}
+          {tab==="apoio"     &&<div key="ap" className="page-enter"><SupportTab/></div>}
         </div>
       </>}
       {/* Mobile bottom navigation */}
@@ -1179,45 +1251,78 @@ function AuthPage({onLogin}){
 function NavBar({user,tab,setTab,onLogout,dark,toggleTheme}){
   const admin=isAdmin(user);
   const prof=getProfile(user.id);
-  const navTabs=[{k:"home",l:"Início"},{k:"materias",l:"Matérias"},{k:"agenda",l:"Agenda"},{k:"comunidade",l:"Comunidade"},{k:"feedback",l:"Feedback"}];
-  return(<nav className="nav">
-    {/* Logo */}
-    <div className="nlogo" onClick={()=>setTab("home")}>◈ <span style={{fontWeight:700}}>Study</span><span style={{color:"var(--t2)",fontWeight:400}}> Vieira</span></div>
-
-    {/* Main tabs */}
-    <div style={{display:"flex",gap:2,flex:1}}>
-      {navTabs.map(t=>(
-        <button key={t.k} className={`nt ${tab===t.k?"on":""}`} onClick={()=>setTab(t.k)}>{t.l}</button>
-      ))}
-    </div>
-
-    {/* Right actions */}
-    <div className="nr">
-      {/* Theme toggle */}
-      <button className="btn-ico btn btn-g" onClick={toggleTheme} title={dark?"Tema claro":"Tema escuro"}
-        style={{fontSize:15,border:"1px solid var(--b2)"}}>
-        {dark?"☀️":"🌙"}
-      </button>
-
-      {/* Admin badge */}
-      {admin&&(
-        <button className="btn btn-adm btn-sm" onClick={()=>setTab("admin")} title="Painel Admin"
-          style={{padding:"5px 10px",fontSize:11,letterSpacing:.3}}>
-          ⭐ Admin
-        </button>
-      )}
-
-      {/* Avatar → perfil */}
-      <div style={{cursor:"pointer",borderRadius:10,padding:"3px 6px",transition:"background .18s",display:"flex",alignItems:"center",gap:6}}
-        onClick={()=>{SFX.click();setTab("perfil");}}
-        onMouseEnter={e=>e.currentTarget.style.background="var(--card-bg)"}
-        onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
-        <Av src={prof.avatar} name={user.name} size={26}/>
+  const [menuOpen,setMenuOpen]=useState(false);
+  const navTabs=[
+    {k:"home",      l:"Início",     icon:"🏠"},
+    {k:"materias",  l:"Matérias",   icon:"📚"},
+    {k:"agenda",    l:"Agenda",     icon:"📅"},
+    {k:"comunidade",l:"Comunidade", icon:"👥"},
+    {k:"feedback",  l:"Feedback",   icon:"📬"},
+    {k:"apoio",     l:"Apoie-nos",  icon:"☕"},
+    ...(admin?[{k:"admin",l:"Admin",icon:"⭐"}]:[]),
+  ];
+  const go=(key)=>{SFX.tab();setTab(key);setMenuOpen(false);};
+  return(<>
+    <nav className="nav">
+      <div className="nlogo" onClick={()=>go("home")}>◈ <span style={{fontWeight:700}}>Study</span><span style={{color:"var(--t2)",fontWeight:400}}> Vieira</span></div>
+      {/* Desktop tabs */}
+      <div style={{display:"flex",gap:2,flex:1}}>
+        {navTabs.map(t=>(
+          <button key={t.k} className={`nav-tab ${tab===t.k?"active":""}`} onClick={()=>go(t.k)}>{t.l}</button>
+        ))}
       </div>
-
-      <button className="btn btn-g btn-sm" style={{fontSize:12}} onClick={onLogout}>Sair</button>
-    </div>
-  </nav>);
+      <div className="nav-right">
+        <button className="btn btn-ghost btn-ico" onClick={toggleTheme} style={{fontSize:15,border:"1px solid var(--b2)"}}>
+          {dark?"☀️":"🌙"}
+        </button>
+        <div style={{cursor:"pointer",borderRadius:10,padding:"3px 6px",transition:"background .18s",display:"flex",alignItems:"center"}}
+          onClick={()=>{SFX.click();setTab("perfil");setMenuOpen(false);}}
+          onMouseEnter={e=>e.currentTarget.style.background="var(--card-bg)"}
+          onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+          <Av src={prof.avatar} name={user.name} size={26}/>
+        </div>
+        {/* Hamburger — shown only on mobile via CSS */}
+        <button className="hamburger" onClick={()=>setMenuOpen(m=>!m)}>
+          <span style={{transform:menuOpen?"rotate(45deg) translate(3px,6px)":"none"}}/>
+          <span style={{opacity:menuOpen?0:1}}/>
+          <span style={{transform:menuOpen?"rotate(-45deg) translate(3px,-6px)":"none"}}/>
+        </button>
+        <button className="btn btn-ghost btn-sm" style={{fontSize:12}} onClick={onLogout}>Sair</button>
+      </div>
+    </nav>
+    {/* Mobile drawer */}
+    {menuOpen&&<div className="ham-overlay" onClick={()=>setMenuOpen(false)}/>}
+    {menuOpen&&(
+      <div className="ham-menu">
+        <div style={{padding:"8px 24px 16px",borderBottom:"1px solid var(--b2)",marginBottom:8}}>
+          <div style={{display:"flex",alignItems:"center",gap:10}}>
+            <Av src={prof.avatar} name={user.name} size={38}/>
+            <div>
+              <div style={{fontWeight:600,fontSize:14}}>{user.name.split(" ")[0]}</div>
+              <div style={{fontSize:11,color:"var(--t3)"}}>{user.email}</div>
+            </div>
+          </div>
+        </div>
+        {navTabs.map(t=>(
+          <button key={t.k} className={`ham-item ${tab===t.k?"active":""}`} onClick={()=>go(t.k)}>
+            <span className="ham-icon">{t.icon}</span><span>{t.l}</span>
+          </button>
+        ))}
+        <div className="ham-divider"/>
+        <button className="ham-item" onClick={()=>{SFX.click();setTab("perfil");setMenuOpen(false);}}>
+          <span className="ham-icon">👤</span><span>Perfil</span>
+        </button>
+        <button className="ham-item" onClick={toggleTheme}>
+          <span className="ham-icon">{dark?"☀️":"🌙"}</span>
+          <span>{dark?"Tema claro":"Tema escuro"}</span>
+        </button>
+        <div className="ham-divider"/>
+        <button className="ham-item" onClick={onLogout} style={{color:"#fda4af"}}>
+          <span className="ham-icon">🚪</span><span>Sair</span>
+        </button>
+      </div>
+    )}
+  </>);
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -1710,8 +1815,8 @@ function HomePage({user,setTab}){
   return(<div className="fu">
     <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:18}}>
       <Av src={prof.avatar} name={user.name} size={44}/>
-      <div>
-        <h1 style={{fontSize:22,fontWeight:700,letterSpacing:-.5}}>{greet}, {user.name.split(" ")[0]} 👋</h1>
+      <div style={{minWidth:0}}>
+        <h1 style={{fontSize:22,fontWeight:700,letterSpacing:-.5,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{greet}, {user.name.split(" ")[0]} 👋</h1>
         <p style={{color:"var(--t2)",fontSize:13,marginTop:2}}>{new Date().toLocaleDateString("pt-BR",{weekday:"long",day:"numeric",month:"long",year:"numeric"})}</p>
       </div>
     </div>
@@ -3261,6 +3366,62 @@ function AdminFeedback(){
           })}
         </div>
     }
+  </div>);
+}
+
+
+// ══════════════════════════════════════════════════════════════════════════════
+//  APOIE-NOS — Buy Me a Coffee
+// ══════════════════════════════════════════════════════════════════════════════
+function SupportTab(){
+  const BMC_USER = "vieiratechbr"; 
+
+  return(<div className="fu">
+    <G style={{padding:28,maxWidth:500,margin:"0 auto",textAlign:"center"}}>
+      <div style={{fontSize:48,marginBottom:12}}>☕</div>
+      <h2 style={{fontSize:22,fontWeight:700,marginBottom:10,letterSpacing:-.3}}>Apoie o Study Vieira</h2>
+      <p style={{fontSize:14,color:"var(--t2)",lineHeight:1.7,marginBottom:24}}>
+        O Study Vieira é desenvolvido com muito carinho e dedicação.<br/>
+        Sua contribuição ajuda a manter o servidor no ar, implementar novas funcionalidades
+        e melhorar a experiência de todos os estudantes. 🚀
+      </p>
+
+      {/* Buy Me a Coffee button */}
+      <a href={`https://www.buymeacoffee.com/${BMC_USER}`} target="_blank" rel="noopener noreferrer"
+        style={{display:"inline-flex",alignItems:"center",gap:10,padding:"14px 28px",
+          borderRadius:14,background:"#FFDD00",color:"#000",fontWeight:700,fontSize:16,
+          textDecoration:"none",boxShadow:"0 4px 20px rgba(255,221,0,0.35)",
+          transition:"all .2s",border:"none",cursor:"pointer",marginBottom:28}}
+        onMouseEnter={e=>e.currentTarget.style.transform="scale(1.04)"}
+        onMouseLeave={e=>e.currentTarget.style.transform="scale(1)"}>
+        ☕ Me pague um café
+      </a>
+
+      {/* What the support helps */}
+      <div style={{textAlign:"left",background:"var(--card-bg)",border:"1px solid var(--b2)",borderRadius:14,padding:20,marginBottom:20}}>
+        <div style={{fontSize:13,fontWeight:600,color:"var(--t2)",marginBottom:12,textTransform:"uppercase",letterSpacing:.5}}>
+          Sua doação ajuda a:
+        </div>
+        {[
+          {icon:"🖥️", text:"Manter os servidores no ar 24/7"},
+          {icon:"⚡", text:"Implementar novas funcionalidades"},
+          {icon:"🐛", text:"Corrigir bugs mais rapidamente"},
+          {icon:"📱", text:"Melhorar a experiência mobile"},
+          {icon:"🤝", text:"Manter o app gratuito para todos"},
+        ].map((item,i)=>(
+          <div key={i} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 0",
+            borderBottom:i<4?"1px solid var(--b2)":"none"}}>
+            <span style={{fontSize:18}}>{item.icon}</span>
+            <span style={{fontSize:13,color:"var(--t2)"}}>{item.text}</span>
+          </div>
+        ))}
+      </div>
+
+      <p style={{fontSize:12,color:"var(--t3)",lineHeight:1.6}}>
+        Qualquer valor é bem-vindo e faz diferença! 💙<br/>
+        O pagamento é processado com segurança pelo Buy Me a Coffee.
+      </p>
+    </G>
   </div>);
 }
 
