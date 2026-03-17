@@ -28,6 +28,21 @@ function Modal({ children, onClose }) {
 // ═══════════════════════════════════════════════════════════════════════════════
 //  STORAGE LAYER
 // ═══════════════════════════════════════════════════════════════════════════════
+// ── App version — bump this string on every deploy to auto-clear stale cache ──
+const APP_VERSION = "1.0.3";
+const _CACHE_VER_KEY = "sv5_app_version";
+(()=>{
+  const saved = localStorage.getItem(_CACHE_VER_KEY);
+  if(saved !== APP_VERSION){
+    // New version detected — wipe all sv5_ keys except theme preference
+    const theme = localStorage.getItem("sv5_theme");
+    Object.keys(localStorage).forEach(k=>{ if(k.startsWith("sv5_")) localStorage.removeItem(k); });
+    if(theme) localStorage.setItem("sv5_theme", theme);
+    localStorage.setItem(_CACHE_VER_KEY, APP_VERSION);
+    console.log("[Study Vieira] Cache cleared for version", APP_VERSION);
+  }
+})();
+
 // ── Smart DB: reads from localStorage, mirrors writes to Supabase async ────────
 const _LS = {
   get: (k) => { try { return JSON.parse(localStorage.getItem(k)) ?? null; } catch { return null; } },
@@ -615,13 +630,99 @@ body{font-family:'Figtree',-apple-system,sans-serif;background:var(--bg);min-hei
 /* ── Heatmap ── */
 .heat-cell{width:12px;height:12px;border-radius:2px;transition:background .2s;}
 @keyframes fu{from{opacity:0;transform:translateY(10px);}to{opacity:1;transform:none;}}
+/* ── Bottom nav for mobile ── */
+.bottom-nav{display:none;}
+@media(max-width:480px){
+  .bottom-nav{
+    display:flex;position:fixed;bottom:0;left:0;right:0;z-index:200;
+    background:var(--nav-bg);backdrop-filter:blur(20px);
+    border-top:1px solid var(--nav-border);
+    padding:6px 0 max(6px,env(safe-area-inset-bottom));
+  }
+  .bottom-nav-item{
+    flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;
+    padding:4px 2px;cursor:pointer;transition:all .18s;border:none;background:none;font-family:inherit;
+  }
+  .bottom-nav-icon{font-size:20px;line-height:1;}
+  .bottom-nav-label{font-size:9px;font-weight:500;color:var(--t3);transition:color .18s;}
+  .bottom-nav-item.active .bottom-nav-label{color:var(--t);}
+  .bottom-nav-item.active .bottom-nav-icon{filter:drop-shadow(0 0 6px rgba(255,255,255,0.4));}
+  /* Add bottom padding to main content so it doesn't hide behind bottom nav */
+  .wrap{padding-bottom:70px!important;}
+  /* Hide top nav tabs on mobile (use bottom nav instead) */
+  .nav>div:first-of-type .nav-tab{display:none;}
+}
 .fu{animation:fu .3s cubic-bezier(.22,1,.36,1) both;}
 @keyframes si{from{opacity:0;transform:scale(.97);}to{opacity:1;transform:scale(1);}}
 .si{animation:si .25s cubic-bezier(.22,1,.36,1) both;}
 ::-webkit-scrollbar{width:5px;}
 ::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.09);border-radius:3px;}
-@media(max-width:720px){.hgrid{grid-template-columns:1fr;}.fr{grid-template-columns:1fr;}.nt{display:none;}.nt.on{display:flex;}}
-@media(max-width:500px){.fr{grid-template-columns:1fr;}}
+/* ── TABLET (≤768px) ── */
+@media(max-width:768px){
+  .hgrid{grid-template-columns:1fr;}
+  .hright{position:static!important;}
+  .fr{grid-template-columns:1fr 1fr;}
+  .wrap{padding:16px 12px;}
+  .g2{grid-template-columns:repeat(auto-fill,minmax(160px,1fr));}
+  .g3{grid-template-columns:repeat(auto-fill,minmax(200px,1fr));}
+}
+
+/* ── MOBILE (≤480px) ── */
+@media(max-width:480px){
+  /* Nav */
+  .nav{padding:8px 12px;gap:2px;flex-wrap:nowrap;}
+  .nlogo{font-size:13px;padding:5px 6px;margin-right:4px;}
+  .nlogo span:last-child{display:none;}
+  .nav-tab{padding:6px 8px;font-size:11px;}
+  .nav-right{gap:5px;}
+  .btn-ico{width:28px;height:28px;}
+
+  /* Layout */
+  .wrap{padding:12px 10px;}
+  .hgrid{grid-template-columns:1fr;gap:12px;}
+  .fr{grid-template-columns:1fr!important;}
+  .g2{grid-template-columns:1fr 1fr;gap:8px;}
+  .g3{grid-template-columns:1fr;gap:10px;}
+  .stabs{flex-wrap:wrap;gap:4px;}
+  .stab{padding:6px 10px;font-size:12px;}
+
+  /* Cards */
+  .glass{border-radius:14px;}
+  .mp{padding:18px;}
+  .mo-inner{padding:16px 10px 40px;}
+
+  /* Profile */
+  .prof-banner{height:100px;}
+  .prof-stats{grid-template-columns:repeat(3,1fr);}
+  .prof-stat{padding:10px 4px;}
+  .prof-stat-n{font-size:17px;}
+  .prof-stat-l{font-size:10px;}
+
+  /* Feed */
+  .feed-wrap{height:calc(100vh - 220px);min-height:320px;}
+  .feed-title{font-size:15px;}
+  .feed-content{padding:14px 14px 16px;}
+
+  /* Home grid */
+  .hgrid{gap:10px;}
+
+  /* Buttons */
+  .btn{padding:8px 14px;font-size:12px;}
+  .btn-sm{padding:5px 10px;font-size:11px;}
+
+  /* Typography */
+  h1{font-size:18px!important;}
+  h2{font-size:15px!important;}
+  .sh h2{font-size:15px;}
+}
+
+/* ── VERY SMALL (≤360px) ── */
+@media(max-width:360px){
+  .nav-tab{display:none;}
+  .nav-tab.active{display:flex;background:var(--s2);border:1px solid var(--b);}
+  .nlogo{font-size:12px;}
+  .wrap{padding:10px 8px;}
+}
 `;
 
 // ── Glass Card ────────────────────────────────────────────────────────────────
@@ -908,6 +1009,22 @@ export default function App(){
           {tab==="feedback"  &&<div key="fb" className="page-enter"><FeedbackTab   user={user}/></div>}
         </div>
       </>}
+      {/* Mobile bottom navigation */}
+      {user&&<nav className="bottom-nav">
+        {[
+          {k:"home",      icon:"🏠", label:"Início"},
+          {k:"materias",  icon:"📚", label:"Matérias"},
+          {k:"agenda",    icon:"📅", label:"Agenda"},
+          {k:"comunidade",icon:"👥", label:"Social"},
+          {k:"perfil",    icon:"👤", label:"Perfil"},
+        ].map(t=>(
+          <button key={t.k} className={`bottom-nav-item ${tab===t.k?"active":""}`}
+            onClick={()=>{SFX.tab();setTab(t.k);if(t.k!=="comunidade")setViewUser(null);}}>
+            <span className="bottom-nav-icon">{t.icon}</span>
+            <span className="bottom-nav-label">{t.label}</span>
+          </button>
+        ))}
+      </nav>}
     </div>
   </>);
 }
@@ -1062,7 +1179,7 @@ function AuthPage({onLogin}){
 function NavBar({user,tab,setTab,onLogout,dark,toggleTheme}){
   const admin=isAdmin(user);
   const prof=getProfile(user.id);
-  const navTabs=[{k:"home",l:"Início"},{k:"materias",l:"Matérias"},{k:"agenda",l:"Agenda"},{k:"comunidade",l:"Comunidade"},{k:"feedback",l:"Feedback"}];
+  const navTabs=[{k:"home",l:"Início"},{k:"materias",l:"Matérias"},{k:"agenda",l:"Agenda"},{k:"comunidade",l:"Comunidade"},{k:"feedback",l:"📬"}];
   return(<nav className="nav">
     {/* Logo */}
     <div className="nlogo" onClick={()=>setTab("home")}>◈ <span style={{fontWeight:700}}>Study</span><span style={{color:"var(--t2)",fontWeight:400}}> Vieira</span></div>
