@@ -1167,7 +1167,7 @@ function NavBar({user,tab,setTab,onLogout,dark,toggleTheme}){
     {k:"agenda",    l:"Agenda",    icon:"📅"},
     {k:"comunidade",l:"Comunidade",icon:"👥"},
     {k:"feedback",  l:"Feedback",  icon:"📬"},
-    {k:"apoio",     l:"☕ Apoie",  icon:"☕"},
+    {k:"apoio",     l:"Apoie",  icon:"☕"},
   ];
   const go=(key)=>{SFX.tab();setTab(key);setMenuOpen(false);};
   return(<>
