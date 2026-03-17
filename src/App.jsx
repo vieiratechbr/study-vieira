@@ -679,7 +679,27 @@ body{font-family:'Figtree',-apple-system,sans-serif;background:var(--bg);min-hei
 .si{animation:si .25s cubic-bezier(.22,1,.36,1) both;}
 ::-webkit-scrollbar{width:5px;}
 ::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.09);border-radius:3px;}
-/* Mobile handled in JS — MobileBlock component shown for screens < 600px */
+/* ── Mobile block — CSS only, no JS ── */
+@media(max-width:550px){
+  .app,.nav,.wrap{display:none!important;}
+  body::before{
+    content:'';position:fixed;inset:0;background:#1c1c1e;z-index:9999;
+  }
+  body::after{
+    content:'📱';position:fixed;top:50%;left:50%;
+    transform:translate(-50%,-60%);
+    font-size:64px;z-index:10000;
+  }
+  .mobile-msg{
+    display:flex!important;
+  }
+}
+.mobile-msg{
+  display:none;position:fixed;inset:0;z-index:10001;
+  flex-direction:column;align-items:center;justify-content:center;
+  background:#1c1c1e;padding:32px;text-align:center;
+  font-family:'Figtree',-apple-system,sans-serif;
+}
 `;
 
 // ── Glass Card ────────────────────────────────────────────────────────────────
@@ -837,53 +857,9 @@ const sbDelete = async (table, match) => {
 
 
 // ══════════════════════════════════════════════════════════════════════════════
-//  MOBILE BLOCK — telas < 600px
-// ══════════════════════════════════════════════════════════════════════════════
-function MobileBlock(){
-  return(
-    <div style={{
-      position:"fixed",inset:0,zIndex:99999,
-      background:"#1c1c1e",
-      display:"flex",flexDirection:"column",
-      alignItems:"center",justifyContent:"center",
-      padding:32,textAlign:"center",
-      fontFamily:"'Figtree',-apple-system,sans-serif",
-    }}>
-      <div style={{fontSize:64,marginBottom:20}}>📱</div>
-      <div style={{fontSize:26,fontWeight:700,color:"white",letterSpacing:-.5,marginBottom:10}}>
-        Em breve no celular!
-      </div>
-      <div style={{fontSize:15,color:"rgba(255,255,255,0.5)",lineHeight:1.7,marginBottom:32,maxWidth:280}}>
-        Estamos desenvolvendo o app do <strong style={{color:"white"}}>Study Vieira</strong> para você estudar de onde estiver.
-      </div>
-      <div style={{
-        padding:"12px 24px",borderRadius:14,
-        background:"rgba(255,255,255,0.08)",
-        border:"1px solid rgba(255,255,255,0.12)",
-        color:"rgba(255,255,255,0.6)",fontSize:13,
-        marginBottom:24,
-      }}>
-        🖥️ Por enquanto, acesse pelo computador
-      </div>
-      <div style={{fontSize:12,color:"rgba(255,255,255,0.25)"}}>
-        Study Vieira © {new Date().getFullYear()}
-      </div>
-    </div>
-  );
-}
-
-// ══════════════════════════════════════════════════════════════════════════════
 //  APP ROOT
 // ══════════════════════════════════════════════════════════════════════════════
 export default function App(){
-  const [isMobile,setIsMobile]=useState(()=>window.innerWidth<600);
-  useEffect(()=>{
-    const check=()=>setIsMobile(window.innerWidth<600);
-    window.addEventListener("resize",check);
-    return()=>window.removeEventListener("resize",check);
-  },[]);
-  if(isMobile) return <MobileBlock/>;
-
   const [user,setUser]=useState(()=>USE_SUPABASE?null:DB.get(K.session));
   const [tab,setTab]=useState("home");
   const [viewUser,setViewUser]=useState(null);
@@ -978,6 +954,17 @@ export default function App(){
     const ban=getBan(user.id);
     return(<>
       <style>{CSS}</style><div className="mesh"/>
+      {/* Mobile screen — shown via CSS for screens < 550px */}
+      <div className="mobile-msg">
+        <div style={{fontSize:64,marginBottom:20}}>📱</div>
+        <div style={{fontSize:24,fontWeight:700,color:"white",letterSpacing:-.5,marginBottom:10}}>Em breve nas lojas!</div>
+        <div style={{fontSize:14,color:"rgba(255,255,255,0.5)",lineHeight:1.8,marginBottom:28,maxWidth:260}}>
+          O app do <strong style={{color:"white"}}>Study Vieira</strong> está chegando para iOS e Android.
+        </div>
+        <div style={{padding:"10px 20px",borderRadius:12,background:"rgba(255,255,255,0.07)",border:"1px solid rgba(255,255,255,0.12)",color:"rgba(255,255,255,0.5)",fontSize:13}}>
+          🖥️ Use pelo computador por enquanto
+        </div>
+      </div>
       <div className="pc">
         <G cls="si" style={{maxWidth:420,width:"100%",padding:36,textAlign:"center"}}>
           <div style={{fontSize:48,marginBottom:16}}>🔨</div>
