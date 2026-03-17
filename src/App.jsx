@@ -1203,14 +1203,14 @@ function NavBar({user,tab,setTab,onLogout,dark,toggleTheme}){
   const admin=isAdmin(user);
   const prof=getProfile(user.id);
   const [menuOpen,setMenuOpen]=useState(false);
+  // Desktop tabs — no admin here, it gets its own button
   const navTabs=[
-    {k:"home",      l:"Início",     icon:"🏠"},
-    {k:"materias",  l:"Matérias",   icon:"📚"},
-    {k:"agenda",    l:"Agenda",     icon:"📅"},
-    {k:"comunidade",l:"Comunidade", icon:"👥"},
-    {k:"feedback",  l:"Feedback",   icon:"📬"},
-    {k:"apoio",     l:"Apoie-nos",  icon:"☕"},
-    ...(admin?[{k:"admin",l:"Admin",icon:"⭐"}]:[]),
+    {k:"home",      l:"Início",    icon:"🏠"},
+    {k:"materias",  l:"Matérias",  icon:"📚"},
+    {k:"agenda",    l:"Agenda",    icon:"📅"},
+    {k:"comunidade",l:"Comunidade",icon:"👥"},
+    {k:"feedback",  l:"Feedback",  icon:"📬"},
+    {k:"apoio",     l:"☕ Apoie",  icon:"☕"},
   ];
   const go=(key)=>{SFX.tab();setTab(key);setMenuOpen(false);};
   return(<>
@@ -1223,16 +1223,25 @@ function NavBar({user,tab,setTab,onLogout,dark,toggleTheme}){
         ))}
       </div>
       <div className="nav-right">
+        {/* Theme toggle */}
         <button className="btn btn-ghost btn-ico" onClick={toggleTheme} style={{fontSize:15,border:"1px solid var(--b2)"}}>
           {dark?"☀️":"🌙"}
         </button>
+        {/* Admin button — yellow, only for admins, next to avatar */}
+        {admin&&(
+          <button className="btn btn-admin btn-sm" onClick={()=>go("admin")}
+            style={{padding:"5px 10px",fontSize:11,fontWeight:600,letterSpacing:.3}}>
+            ⭐ Admin
+          </button>
+        )}
+        {/* Avatar → perfil */}
         <div style={{cursor:"pointer",borderRadius:10,padding:"3px 6px",transition:"background .18s",display:"flex",alignItems:"center"}}
           onClick={()=>{SFX.click();setTab("perfil");setMenuOpen(false);}}
           onMouseEnter={e=>e.currentTarget.style.background="var(--card-bg)"}
           onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
           <Av src={prof.avatar} name={user.name} size={26}/>
         </div>
-        {/* Hamburger — shown only on mobile via CSS */}
+        {/* Hamburger — mobile only, shown via CSS */}
         <button className="hamburger" onClick={()=>setMenuOpen(m=>!m)}>
           <span style={{transform:menuOpen?"rotate(45deg) translate(3px,6px)":"none"}}/>
           <span style={{opacity:menuOpen?0:1}}/>
@@ -1259,6 +1268,13 @@ function NavBar({user,tab,setTab,onLogout,dark,toggleTheme}){
             <span className="ham-icon">{t.icon}</span><span>{t.l}</span>
           </button>
         ))}
+        {admin&&<>
+          <div className="ham-divider"/>
+          <button className={`ham-item ${tab==="admin"?"active":""}`} onClick={()=>go("admin")}
+            style={{color:"#fcd34d"}}>
+            <span className="ham-icon">⭐</span><span>Admin</span>
+          </button>
+        </>}
         <div className="ham-divider"/>
         <button className="ham-item" onClick={()=>{SFX.click();setTab("perfil");setMenuOpen(false);}}>
           <span className="ham-icon">👤</span><span>Perfil</span>
