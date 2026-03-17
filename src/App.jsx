@@ -679,72 +679,7 @@ body{font-family:'Figtree',-apple-system,sans-serif;background:var(--bg);min-hei
 .si{animation:si .25s cubic-bezier(.22,1,.36,1) both;}
 ::-webkit-scrollbar{width:5px;}
 ::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.09);border-radius:3px;}
-/* ── TABLET (≤768px) ── */
-@media(max-width:768px){
-  .hgrid{grid-template-columns:1fr;}
-  .hright{position:static!important;}
-  .fr{grid-template-columns:1fr 1fr;}
-  .wrap{padding:16px 12px;}
-  .g2{grid-template-columns:repeat(auto-fill,minmax(160px,1fr));}
-  .g3{grid-template-columns:repeat(auto-fill,minmax(200px,1fr));}
-}
-/* ── MOBILE (≤480px) ── */
-@media(max-width:480px){
-  /* Navbar: hide desktop tabs, show hamburger */
-  .nav-tab{display:none!important;}
-  .hamburger{display:flex!important;}
-  .ham-overlay,.ham-menu{display:block;}
-  .nav{padding:8px 12px;gap:6px;}
-  .nlogo{font-size:14px;padding:5px 8px;margin-right:0;}
-  .nav-right{gap:5px;margin-left:auto;}
-  .btn-ico{width:30px;height:30px;font-size:14px;}
-  /* Layout */
-  .wrap{padding:12px 10px 80px!important;}
-  .hgrid{grid-template-columns:1fr!important;gap:12px;}
-  .hleft{gap:12px;}
-  .hright{position:static!important;}
-  .fr{grid-template-columns:1fr!important;}
-  .g2{grid-template-columns:1fr 1fr;gap:8px;}
-  .g3{grid-template-columns:1fr;gap:10px;}
-  /* Sub-tabs */
-  .stabs{flex-wrap:wrap;gap:3px;width:100%;}
-  .stab{padding:6px 10px;font-size:11px;flex:1;text-align:center;}
-  /* Cards */
-  .glass{border-radius:14px;}
-  .mp{padding:16px;}
-  .mo-inner{padding:14px 10px 50px;}
-  /* Feed */
-  .feed-wrap{height:320px;min-height:280px;}
-  .feed-title{font-size:15px;}
-  .feed-content{padding:12px 12px 14px;}
-  /* Profile */
-  .prof-banner{height:90px;}
-  .prof-stats{grid-template-columns:repeat(3,1fr);}
-  .prof-stat{padding:10px 4px;}
-  .prof-stat-n{font-size:16px;}
-  .prof-stat-l{font-size:9px;letter-spacing:0;}
-  /* Typography */
-  h1{font-size:18px!important;letter-spacing:-.3px!important;}
-  h2{font-size:15px!important;}
-  .sh h2{font-size:15px;}
-  .sh{margin-bottom:10px;}
-  /* Buttons */
-  .btn{padding:8px 14px;font-size:12px;}
-  .btn-sm{padding:5px 9px;font-size:11px;}
-  .btn-f{padding:10px 18px;}
-  /* Modal */
-  .post-detail-img{max-height:200px;}
-  /* Bottom nav */
-  .bottom-nav{display:flex;position:fixed;bottom:0;left:0;right:0;z-index:200;
-    background:var(--nav-bg);backdrop-filter:blur(20px);
-    border-top:1px solid var(--nav-border);
-    padding:6px 0 max(6px,env(safe-area-inset-bottom));}
-}
-/* ── VERY SMALL (≤360px) ── */
-@media(max-width:360px){
-  .nlogo{font-size:12px;}
-  .wrap{padding:10px 8px;}
-}
+/* Mobile handled in JS — MobileBlock component shown for screens < 600px */
 `;
 
 // ── Glass Card ────────────────────────────────────────────────────────────────
@@ -900,10 +835,55 @@ const sbDelete = async (table, match) => {
   try { await sb.from(table).delete().match(match); } catch (e) { console.warn(e.message); }
 };
 
+
+// ══════════════════════════════════════════════════════════════════════════════
+//  MOBILE BLOCK — telas < 600px
+// ══════════════════════════════════════════════════════════════════════════════
+function MobileBlock(){
+  return(
+    <div style={{
+      position:"fixed",inset:0,zIndex:99999,
+      background:"#1c1c1e",
+      display:"flex",flexDirection:"column",
+      alignItems:"center",justifyContent:"center",
+      padding:32,textAlign:"center",
+      fontFamily:"'Figtree',-apple-system,sans-serif",
+    }}>
+      <div style={{fontSize:64,marginBottom:20}}>📱</div>
+      <div style={{fontSize:26,fontWeight:700,color:"white",letterSpacing:-.5,marginBottom:10}}>
+        Em breve no celular!
+      </div>
+      <div style={{fontSize:15,color:"rgba(255,255,255,0.5)",lineHeight:1.7,marginBottom:32,maxWidth:280}}>
+        Estamos desenvolvendo o app do <strong style={{color:"white"}}>Study Vieira</strong> para você estudar de onde estiver.
+      </div>
+      <div style={{
+        padding:"12px 24px",borderRadius:14,
+        background:"rgba(255,255,255,0.08)",
+        border:"1px solid rgba(255,255,255,0.12)",
+        color:"rgba(255,255,255,0.6)",fontSize:13,
+        marginBottom:24,
+      }}>
+        🖥️ Por enquanto, acesse pelo computador
+      </div>
+      <div style={{fontSize:12,color:"rgba(255,255,255,0.25)"}}>
+        Study Vieira © {new Date().getFullYear()}
+      </div>
+    </div>
+  );
+}
+
 // ══════════════════════════════════════════════════════════════════════════════
 //  APP ROOT
 // ══════════════════════════════════════════════════════════════════════════════
 export default function App(){
+  const [isMobile,setIsMobile]=useState(()=>window.innerWidth<600);
+  useEffect(()=>{
+    const check=()=>setIsMobile(window.innerWidth<600);
+    window.addEventListener("resize",check);
+    return()=>window.removeEventListener("resize",check);
+  },[]);
+  if(isMobile) return <MobileBlock/>;
+
   const [user,setUser]=useState(()=>USE_SUPABASE?null:DB.get(K.session));
   const [tab,setTab]=useState("home");
   const [viewUser,setViewUser]=useState(null);
@@ -1210,7 +1190,7 @@ function NavBar({user,tab,setTab,onLogout,dark,toggleTheme}){
     {k:"agenda",    l:"Agenda",    icon:"📅"},
     {k:"comunidade",l:"Comunidade",icon:"👥"},
     {k:"feedback",  l:"Feedback",  icon:"📬"},
-    {k:"apoio",     l:"Apoie",  icon:"☕"},
+    {k:"apoio",     l:"☕ Apoie",  icon:"☕"},
   ];
   const go=(key)=>{SFX.tab();setTab(key);setMenuOpen(false);};
   return(<>
