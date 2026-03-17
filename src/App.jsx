@@ -28,21 +28,6 @@ function Modal({ children, onClose }) {
 // ═══════════════════════════════════════════════════════════════════════════════
 //  STORAGE LAYER
 // ═══════════════════════════════════════════════════════════════════════════════
-// ── App version — bump this string on every deploy to auto-clear stale cache ──
-const APP_VERSION = "1.0.3";
-const _CACHE_VER_KEY = "sv5_app_version";
-(()=>{
-  const saved = localStorage.getItem(_CACHE_VER_KEY);
-  if(saved !== APP_VERSION){
-    // New version detected — wipe all sv5_ keys except theme preference
-    const theme = localStorage.getItem("sv5_theme");
-    Object.keys(localStorage).forEach(k=>{ if(k.startsWith("sv5_")) localStorage.removeItem(k); });
-    if(theme) localStorage.setItem("sv5_theme", theme);
-    localStorage.setItem(_CACHE_VER_KEY, APP_VERSION);
-    console.log("[Study Vieira] Cache cleared for version", APP_VERSION);
-  }
-})();
-
 // ── Smart DB: reads from localStorage, mirrors writes to Supabase async ────────
 const _LS = {
   get: (k) => { try { return JSON.parse(localStorage.getItem(k)) ?? null; } catch { return null; } },
@@ -266,8 +251,9 @@ const K = {
 };
 
 // ── Constants ─────────────────────────────────────────────────────────────────
-const FOUNDER      = "admin@studyvieira.com";
-const FOUNDER_PASS = "SV@Admin2025!";
+// Nunca exponha senhas reais no código — use variáveis de ambiente
+const FOUNDER      = import.meta.env.VITE_FOUNDER_EMAIL || "admin@studyvieira.com";
+const FOUNDER_PASS = import.meta.env.VITE_FOUNDER_PASS  || "";
 const FOUNDER_ID   = "sv_founder_001";
 
 // Garante que a conta do fundador sempre existe no banco local
@@ -423,7 +409,7 @@ const CSS_LIGHT = `
 `;
 
 const CSS = `
-@import url('https://fonts.googleapis.com/css2?family=Figtree:wght@300;400;500;600;700&display=swap');:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Figtree:wght@300;400;500;600;700&display=swap');
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
 :root{--r:20px;--blur:32px;}
 html,body{height:100%;}#root{min-height:100%;}
@@ -450,18 +436,10 @@ body{font-family:'Figtree',-apple-system,sans-serif;background:var(--bg);min-hei
 .nlogo{font-size:15px;font-weight:700;letter-spacing:-.3px;cursor:pointer;padding:6px 10px;border-radius:9px;transition:background .18s;margin-right:8px;user-select:none;}
 .nlogo:hover{background:rgba(255,255,255,0.07);}
 .nlogo em{font-style:normal;color:var(--t2);font-weight:400;font-size:12px;margin-left:3px;}
-.nt,.nav-tab{padding:7px 13px;border-radius:10px;font-size:13px;font-weight:500;color:var(--t2);cursor:pointer;transition:all .18s;border:1px solid transparent;background:none;font-family:inherit;}
-.nt:hover,.nav-tab:hover{color:var(--t);background:rgba(255,255,255,0.06);}
-.nt.on,.nav-tab.active{color:var(--t);background:var(--s2,rgba(255,255,255,0.10));border-color:var(--b);box-shadow:0 1px 0 var(--shine) inset;}
-.nr,.nav-right{display:flex;align-items:center;gap:8px;margin-left:auto;}
-.btn-admin{background:rgba(252,211,77,0.12);color:#fcd34d;border-color:rgba(252,211,77,0.22);}
-.btn-admin:hover{background:rgba(252,211,77,0.2);}
-.btn-ghost{background:rgba(255,255,255,0.05);color:var(--t2);border-color:var(--b2);}
-.btn-ghost:hover{background:rgba(255,255,255,0.09);color:var(--t);}
-.btn-fill{background:rgba(255,255,255,0.13);color:var(--t);border-color:rgba(255,255,255,0.17);box-shadow:0 1px 0 rgba(255,255,255,0.2) inset,0 3px 10px rgba(0,0,0,0.18);}
-.btn-fill:hover{background:rgba(255,255,255,0.19);}
-.btn-danger{background:rgba(255,70,70,0.11);color:#ff9494;border-color:rgba(255,70,70,0.2);}
-.btn-danger:hover{background:rgba(255,70,70,0.18);}
+.nt{padding:7px 13px;border-radius:10px;font-size:13px;font-weight:500;color:var(--t2);cursor:pointer;transition:all .18s;border:1px solid transparent;background:none;font-family:inherit;}
+.nt:hover{color:var(--t);background:rgba(255,255,255,0.06);}
+.nt.on{color:var(--t);background:var(--s2,rgba(255,255,255,0.10));border-color:var(--b);box-shadow:0 1px 0 var(--shine) inset;}
+.nr{display:flex;align-items:center;gap:8px;margin-left:auto;}
 .adm-badge{padding:3px 8px;border-radius:6px;font-size:10px;font-weight:600;letter-spacing:.4px;text-transform:uppercase;background:rgba(252,211,77,0.15);border:1px solid rgba(252,211,77,0.28);color:#fcd34d;}
 .ban-badge{padding:3px 8px;border-radius:6px;font-size:10px;font-weight:600;letter-spacing:.3px;text-transform:uppercase;background:rgba(255,70,70,0.15);border:1px solid rgba(255,70,70,0.28);color:#ff9494;}
 .av{border-radius:50%;object-fit:cover;border:1px solid rgba(255,255,255,0.2);flex-shrink:0;}
@@ -638,58 +616,13 @@ body{font-family:'Figtree',-apple-system,sans-serif;background:var(--bg);min-hei
 /* ── Heatmap ── */
 .heat-cell{width:12px;height:12px;border-radius:2px;transition:background .2s;}
 @keyframes fu{from{opacity:0;transform:translateY(10px);}to{opacity:1;transform:none;}}
-
-.card-bg{background:var(--card-bg);}
-.alert-error{padding:9px 13px;border-radius:9px;font-size:13px;margin-bottom:12px;background:rgba(255,70,70,0.11);border:1px solid rgba(255,70,70,0.2);color:#ff9494;}
-.alert-success{padding:9px 13px;border-radius:9px;font-size:13px;margin-bottom:12px;background:rgba(86,234,172,0.11);border:1px solid rgba(86,234,172,0.2);color:#5eead4;}
-.modal-overlay{position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,0.75);backdrop-filter:blur(16px);overflow-y:auto;overflow-x:hidden;display:block;}
-.modal-box{width:100%;max-width:500px;padding:24px;flex-shrink:0;box-sizing:border-box;}
-.home-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start;}
-
-/* ── Hamburger menu ── */
-.hamburger{display:none;flex-direction:column;gap:5px;cursor:pointer;padding:7px;
-  background:rgba(255,255,255,0.06);border:1px solid var(--b2);border-radius:9px;
-  align-items:center;justify-content:center;width:34px;height:34px;flex-shrink:0;}
-.hamburger span{display:block;width:16px;height:2px;background:var(--t);border-radius:2px;
-  transition:transform .22s ease,opacity .22s ease;}
-/* Ham drawer */
-.ham-overlay{display:none;position:fixed;inset:0;z-index:999;background:rgba(0,0,0,0.55);backdrop-filter:blur(4px);}
-.ham-menu{display:none;position:fixed;top:0;right:0;bottom:0;z-index:1000;
-  width:min(280px,85vw);background:var(--nav-bg);backdrop-filter:blur(40px);
-  border-left:1px solid var(--nav-border);flex-direction:column;padding:16px 0 40px;overflow-y:auto;
-  animation:slideInRight .25s cubic-bezier(.22,1,.36,1);}
-@keyframes slideInRight{from{transform:translateX(100%);}to{transform:translateX(0);}}
-.ham-item{display:flex;align-items:center;gap:12px;padding:13px 20px;
-  font-size:15px;font-weight:500;color:var(--t2);cursor:pointer;
-  transition:all .18s;border:none;border-left:3px solid transparent;
-  background:none;font-family:inherit;width:100%;text-align:left;}
-.ham-item:active{background:var(--card-hover);}
-.ham-item.active{color:var(--t);background:var(--card-bg);border-left-color:var(--t);}
-.ham-icon{font-size:20px;width:28px;text-align:center;flex-shrink:0;}
-.ham-divider{height:1px;background:var(--b2);margin:8px 16px;}
-/* Bottom nav (mobile) */
-.bottom-nav{display:none;}
-.bottom-nav-item{flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;
-  padding:6px 2px;cursor:pointer;border:none;background:none;font-family:inherit;}
-.bottom-nav-icon{font-size:20px;line-height:1;}
-.bottom-nav-label{font-size:9px;font-weight:500;color:var(--t3);transition:color .18s;}
-.bottom-nav-item.active .bottom-nav-label{color:var(--t);}
 .fu{animation:fu .3s cubic-bezier(.22,1,.36,1) both;}
 @keyframes si{from{opacity:0;transform:scale(.97);}to{opacity:1;transform:scale(1);}}
 .si{animation:si .25s cubic-bezier(.22,1,.36,1) both;}
 ::-webkit-scrollbar{width:5px;}
 ::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.09);border-radius:3px;}
-/* ── Mobile block — CSS only ── */
-.mobile-msg{display:none;}
-@media(max-width:550px){
-  .app,.nav,.wrap{display:none!important;}
-  .mobile-msg{
-    display:flex;position:fixed;inset:0;z-index:9999;
-    flex-direction:column;align-items:center;justify-content:center;
-    background:#1c1c1e;padding:40px 32px;text-align:center;
-    font-family:'Figtree',-apple-system,sans-serif;
-  }
-}
+@media(max-width:720px){.hgrid{grid-template-columns:1fr;}.fr{grid-template-columns:1fr;}.nt{display:none;}.nt.on{display:flex;}}
+@media(max-width:500px){.fr{grid-template-columns:1fr;}}
 `;
 
 // ── Glass Card ────────────────────────────────────────────────────────────────
@@ -845,7 +778,6 @@ const sbDelete = async (table, match) => {
   try { await sb.from(table).delete().match(match); } catch (e) { console.warn(e.message); }
 };
 
-
 // ══════════════════════════════════════════════════════════════════════════════
 //  APP ROOT
 // ══════════════════════════════════════════════════════════════════════════════
@@ -944,17 +876,6 @@ export default function App(){
     const ban=getBan(user.id);
     return(<>
       <style>{CSS}</style><div className="mesh"/>
-      {/* Mobile screen — shown via CSS for screens < 550px */}
-      <div className="mobile-msg">
-        <div style={{fontSize:64,marginBottom:20}}>📱</div>
-        <div style={{fontSize:24,fontWeight:700,color:"white",letterSpacing:-.5,marginBottom:10}}>Em breve nas lojas!</div>
-        <div style={{fontSize:14,color:"rgba(255,255,255,0.5)",lineHeight:1.8,marginBottom:28,maxWidth:260}}>
-          O app do <strong style={{color:"white"}}>Study Vieira</strong> está chegando para iOS e Android.
-        </div>
-        <div style={{padding:"10px 20px",borderRadius:12,background:"rgba(255,255,255,0.07)",border:"1px solid rgba(255,255,255,0.12)",color:"rgba(255,255,255,0.5)",fontSize:13}}>
-          🖥️ Use pelo computador por enquanto
-        </div>
-      </div>
       <div className="pc">
         <G cls="si" style={{maxWidth:420,width:"100%",padding:36,textAlign:"center"}}>
           <div style={{fontSize:48,marginBottom:16}}>🔨</div>
@@ -986,25 +907,8 @@ export default function App(){
           {tab==="perfil"    &&<div key="p" className="page-enter"><ProfileTab    user={user} setUser={(u)=>{DB.set(K.session,u);setUser(u);}}/></div>}
           {tab==="admin"     &&<div key="ad" className="page-enter"><AdminTab      user={user} refreshUser={refreshUser}/></div>}
           {tab==="feedback"  &&<div key="fb" className="page-enter"><FeedbackTab   user={user}/></div>}
-          {tab==="apoio"     &&<div key="ap" className="page-enter"><SupportTab/></div>}
         </div>
       </>}
-      {/* Mobile bottom navigation */}
-      {user&&<nav className="bottom-nav">
-        {[
-          {k:"home",      icon:"🏠", label:"Início"},
-          {k:"materias",  icon:"📚", label:"Matérias"},
-          {k:"agenda",    icon:"📅", label:"Agenda"},
-          {k:"comunidade",icon:"👥", label:"Social"},
-          {k:"perfil",    icon:"👤", label:"Perfil"},
-        ].map(t=>(
-          <button key={t.k} className={`bottom-nav-item ${tab===t.k?"active":""}`}
-            onClick={()=>{SFX.tab();setTab(t.k);if(t.k!=="comunidade")setViewUser(null);}}>
-            <span className="bottom-nav-icon">{t.icon}</span>
-            <span className="bottom-nav-label">{t.label}</span>
-          </button>
-        ))}
-      </nav>}
     </div>
   </>);
 }
@@ -1038,6 +942,7 @@ function AuthPage({onLogin}){
           if(!email.trim()||!pass.trim()){safe(()=>{setErr("Preencha e-mail e senha.");setLoading(false);});SFX.error();return;}
           const te=email.trim().toLowerCase();
           if(te===FOUNDER){
+            if(!FOUNDER_PASS){safe(()=>{setErr("Conta de administrador — faça login pelo Supabase.");setLoading(false);});SFX.error();return;}
             if(pass!==FOUNDER_PASS){safe(()=>{setErr("Senha incorreta.");setLoading(false);});SFX.error();return;}
             onLogin({id:FOUNDER_ID,name:"Admin Study Vieira",email:FOUNDER,isAdm:true});return;
           }
@@ -1159,94 +1064,45 @@ function AuthPage({onLogin}){
 function NavBar({user,tab,setTab,onLogout,dark,toggleTheme}){
   const admin=isAdmin(user);
   const prof=getProfile(user.id);
-  const [menuOpen,setMenuOpen]=useState(false);
-  // Desktop tabs — no admin here, it gets its own button
-  const navTabs=[
-    {k:"home",      l:"Início",    icon:"🏠"},
-    {k:"materias",  l:"Matérias",  icon:"📚"},
-    {k:"agenda",    l:"Agenda",    icon:"📅"},
-    {k:"comunidade",l:"Comunidade",icon:"👥"},
-    {k:"feedback",  l:"Feedback",  icon:"📬"},
-    {k:"apoio",     l:"Apoie",  icon:"☕"},
-  ];
-  const go=(key)=>{SFX.tab();setTab(key);setMenuOpen(false);};
-  return(<>
-    <nav className="nav">
-      <div className="nlogo" onClick={()=>go("home")}>◈ <span style={{fontWeight:700}}>Study</span><span style={{color:"var(--t2)",fontWeight:400}}> Vieira</span></div>
-      {/* Desktop tabs */}
-      <div style={{display:"flex",gap:2,flex:1}}>
-        {navTabs.map(t=>(
-          <button key={t.k} className={`nav-tab ${tab===t.k?"active":""}`} onClick={()=>go(t.k)}>{t.l}</button>
-        ))}
+  const navTabs=[{k:"home",l:"Início"},{k:"materias",l:"Matérias"},{k:"agenda",l:"Agenda"},{k:"comunidade",l:"Comunidade"},{k:"feedback",l:"📬 Feedback"}];
+  return(<nav className="nav">
+    {/* Logo */}
+    <div className="nlogo" onClick={()=>setTab("home")}>◈ <span style={{fontWeight:700}}>Study</span><span style={{color:"var(--t2)",fontWeight:400}}> Vieira</span></div>
+
+    {/* Main tabs */}
+    <div style={{display:"flex",gap:2,flex:1}}>
+      {navTabs.map(t=>(
+        <button key={t.k} className={`nt ${tab===t.k?"on":""}`} onClick={()=>setTab(t.k)}>{t.l}</button>
+      ))}
+    </div>
+
+    {/* Right actions */}
+    <div className="nr">
+      {/* Theme toggle */}
+      <button className="btn-ico btn btn-g" onClick={toggleTheme} title={dark?"Tema claro":"Tema escuro"}
+        style={{fontSize:15,border:"1px solid var(--b2)"}}>
+        {dark?"☀️":"🌙"}
+      </button>
+
+      {/* Admin badge */}
+      {admin&&(
+        <button className="btn btn-adm btn-sm" onClick={()=>setTab("admin")} title="Painel Admin"
+          style={{padding:"5px 10px",fontSize:11,letterSpacing:.3}}>
+          ⭐ Admin
+        </button>
+      )}
+
+      {/* Avatar → perfil */}
+      <div style={{cursor:"pointer",borderRadius:10,padding:"3px 6px",transition:"background .18s",display:"flex",alignItems:"center",gap:6}}
+        onClick={()=>{SFX.click();setTab("perfil");}}
+        onMouseEnter={e=>e.currentTarget.style.background="var(--card-bg)"}
+        onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+        <Av src={prof.avatar} name={user.name} size={26}/>
       </div>
-      <div className="nav-right">
-        {/* Theme toggle */}
-        <button className="btn btn-ghost btn-ico" onClick={toggleTheme} style={{fontSize:15,border:"1px solid var(--b2)"}}>
-          {dark?"☀️":"🌙"}
-        </button>
-        {/* Admin button — yellow, only for admins, next to avatar */}
-        {admin&&(
-          <button className="btn btn-admin btn-sm" onClick={()=>go("admin")}
-            style={{padding:"5px 10px",fontSize:11,fontWeight:600,letterSpacing:.3}}>
-            ⭐ Admin
-          </button>
-        )}
-        {/* Avatar → perfil */}
-        <div style={{cursor:"pointer",borderRadius:10,padding:"3px 6px",transition:"background .18s",display:"flex",alignItems:"center"}}
-          onClick={()=>{SFX.click();setTab("perfil");setMenuOpen(false);}}
-          onMouseEnter={e=>e.currentTarget.style.background="var(--card-bg)"}
-          onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
-          <Av src={prof.avatar} name={user.name} size={26}/>
-        </div>
-        {/* Hamburger — mobile only, shown via CSS */}
-        <button className="hamburger" onClick={()=>setMenuOpen(m=>!m)}>
-          <span style={{transform:menuOpen?"rotate(45deg) translate(3px,6px)":"none"}}/>
-          <span style={{opacity:menuOpen?0:1}}/>
-          <span style={{transform:menuOpen?"rotate(-45deg) translate(3px,-6px)":"none"}}/>
-        </button>
-        <button className="btn btn-ghost btn-sm" style={{fontSize:12}} onClick={onLogout}>Sair</button>
-      </div>
-    </nav>
-    {/* Mobile drawer */}
-    {menuOpen&&<div className="ham-overlay" onClick={()=>setMenuOpen(false)}/>}
-    {menuOpen&&(
-      <div className="ham-menu">
-        <div style={{padding:"8px 24px 16px",borderBottom:"1px solid var(--b2)",marginBottom:8}}>
-          <div style={{display:"flex",alignItems:"center",gap:10}}>
-            <Av src={prof.avatar} name={user.name} size={38}/>
-            <div>
-              <div style={{fontWeight:600,fontSize:14}}>{user.name.split(" ")[0]}</div>
-              <div style={{fontSize:11,color:"var(--t3)"}}>{user.email}</div>
-            </div>
-          </div>
-        </div>
-        {navTabs.map(t=>(
-          <button key={t.k} className={`ham-item ${tab===t.k?"active":""}`} onClick={()=>go(t.k)}>
-            <span className="ham-icon">{t.icon}</span><span>{t.l}</span>
-          </button>
-        ))}
-        {admin&&<>
-          <div className="ham-divider"/>
-          <button className={`ham-item ${tab==="admin"?"active":""}`} onClick={()=>go("admin")}
-            style={{color:"#fcd34d"}}>
-            <span className="ham-icon">⭐</span><span>Admin</span>
-          </button>
-        </>}
-        <div className="ham-divider"/>
-        <button className="ham-item" onClick={()=>{SFX.click();setTab("perfil");setMenuOpen(false);}}>
-          <span className="ham-icon">👤</span><span>Perfil</span>
-        </button>
-        <button className="ham-item" onClick={toggleTheme}>
-          <span className="ham-icon">{dark?"☀️":"🌙"}</span>
-          <span>{dark?"Tema claro":"Tema escuro"}</span>
-        </button>
-        <div className="ham-divider"/>
-        <button className="ham-item" onClick={onLogout} style={{color:"#fda4af"}}>
-          <span className="ham-icon">🚪</span><span>Sair</span>
-        </button>
-      </div>
-    )}
-  </>);
+
+      <button className="btn btn-g btn-sm" style={{fontSize:12}} onClick={onLogout}>Sair</button>
+    </div>
+  </nav>);
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -1260,7 +1116,6 @@ function AdminTab({user,refreshUser}){
     {k:"comms",   l:"🏫 Comunidades"},
     {k:"users",   l:"👥 Usuários & Punições"},
     {k:"admins",  l:"⭐ Administradores"},
-    {k:"feedback",l:"📬 Feedbacks"},
   ];
   return(<div className="fu">
     <div style={{marginBottom:18}}>
@@ -1276,8 +1131,7 @@ function AdminTab({user,refreshUser}){
     {sub==="avisos" &&<AdminPosts     user={user}/>}
     {sub==="comms"  &&<AdminComms     user={user}/>}
     {sub==="users"  &&<AdminUsers     user={user}/>}
-    {sub==="admins"   &&<AdminAdmins    user={user}/>}
-    {sub==="feedback" &&<AdminFeedback  user={user}/>}
+    {sub==="admins" &&<AdminAdmins    user={user}/>}
   </div>);
 }
 
@@ -1739,8 +1593,8 @@ function HomePage({user,setTab}){
   return(<div className="fu">
     <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:18}}>
       <Av src={prof.avatar} name={user.name} size={44}/>
-      <div style={{minWidth:0}}>
-        <h1 style={{fontSize:22,fontWeight:700,letterSpacing:-.5,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{greet}, {user.name.split(" ")[0]} 👋</h1>
+      <div>
+        <h1 style={{fontSize:22,fontWeight:700,letterSpacing:-.5}}>{greet}, {user.name.split(" ")[0]} 👋</h1>
         <p style={{color:"var(--t2)",fontSize:13,marginTop:2}}>{new Date().toLocaleDateString("pt-BR",{weekday:"long",day:"numeric",month:"long",year:"numeric"})}</p>
       </div>
     </div>
@@ -1947,7 +1801,7 @@ function CommunityTab({user,viewUser,setViewUser}){
         ...(viewUser?[{k:"profile",l:"👤 Perfil"}]:[])
       ].map(t=><button key={t.k} className={`stab ${sub===t.k?"on":""}`} onClick={()=>setSub(t.k)}>{t.l}</button>)}
     </div>
-    {sub==="people"   &&<PeopleTab    user={user}/>}
+    {sub==="people"   &&<PeopleTab    user={user} setViewUser={setViewUser} setSub={setSub}/>}
     {sub==="mycomms"  &&<MyCommsTab   user={user}/>}
     {sub==="allcomms" &&<AllCommsTab  user={user}/>}
     {sub==="friends"  &&<FriendsTab   user={user} setViewUser={setViewUser} setSub={setSub}/>}
@@ -1956,110 +1810,17 @@ function CommunityTab({user,viewUser,setViewUser}){
   </div>);
 }
 
-function PeopleTab({user}){
+function PeopleTab({user,setViewUser,setSub}){
   const [search,setSearch]=useState("");
-  const [results,setResults]=useState([]);
-  const [loading,setLoading]=useState(false);
-  const [selected,setSelected]=useState(null); // user to show in popup
-  const searchRef=useRef(null);
-
-  // Debounced search — queries Supabase directly
-  useEffect(()=>{
-    if(!search.trim()){setResults([]);return;}
-    const timer=setTimeout(async()=>{
-      setLoading(true);
-      try{
-        if(USE_SUPABASE&&sb){
-          const q=search.trim().toLowerCase();
-          const{data}=await sb.from("profiles")
-            .select("id,name,email,bio,avatar_url,course")
-            .neq("id",user.id)
-            .or(`name.ilike.%${q}%,email.ilike.%${q}%`)
-            .limit(20);
-          setResults(data||[]);
-        }else{
-          // localStorage fallback
-          const all=Object.values(DB.get(K.users)||{}).filter(u=>u.id!==user.id);
-          const q=search.toLowerCase();
-          setResults(all.filter(u=>(u.name+u.email).toLowerCase().includes(q)));
-        }
-      }catch(e){console.warn("[search]",e.message);}
-      finally{setLoading(false);}
-    },350);
-    return()=>clearTimeout(timer);
-  },[search]);
-
+  const allUsers=DB.get(K.users)||{};
+  const others=Object.values(allUsers).filter(u=>u.id!==user.id);
+  const filtered=others.filter(u=>!search||(u.name+u.email).toLowerCase().includes(search.toLowerCase()));
   return(<div>
-    {/* Search bar */}
-    <div className="fg" style={{marginBottom:8}}>
-      <input ref={searchRef} className="inp"
-        placeholder="🔍 Buscar por nome ou e-mail..."
-        value={search} onChange={e=>setSearch(e.target.value)}
-        autoComplete="off"/>
-    </div>
-
-    {/* States */}
-    {!search.trim()&&(
-      <G><div className="empty">
-        <div style={{fontSize:32,marginBottom:8}}>🔍</div>
-        <p style={{fontWeight:500}}>Busque por pessoas</p>
-        <p style={{fontSize:12,color:"var(--t3)",marginTop:4}}>Digite um nome ou e-mail para encontrar alguém</p>
-      </div></G>
-    )}
-
-    {search.trim()&&loading&&(
-      <G><div className="empty"><div style={{fontSize:24,marginBottom:8}}>⏳</div><p>Buscando...</p></div></G>
-    )}
-
-    {search.trim()&&!loading&&results.length===0&&(
-      <G><div className="empty">
-        <div style={{fontSize:32,marginBottom:8}}>😕</div>
-        <p>Nenhum usuário encontrado</p>
-        <p style={{fontSize:12,color:"var(--t3)",marginTop:4}}>Tente outro nome ou e-mail</p>
-      </div></G>
-    )}
-
-    {/* Results */}
-    {results.length>0&&(
-      <div style={{display:"flex",flexDirection:"column",gap:6}}>
-        {results.map(u=>(
-          <div key={u.id} className="user-row" style={{cursor:"pointer"}} onClick={()=>setSelected(u)}>
-            <Av src={u.avatar_url} name={u.name} size={42}/>
-            <div style={{flex:1,minWidth:0}}>
-              <div style={{fontSize:14,fontWeight:600}}>{u.name}</div>
-              {u.course&&<div style={{fontSize:12,color:"var(--t2)",marginTop:1}}>{u.course}</div>}
-            </div>
-            <div style={{fontSize:12,color:"var(--t3)"}}>Ver perfil →</div>
-          </div>
-        ))}
-      </div>
-    )}
-
-    {/* Profile popup */}
-    {selected&&(
-      <Modal onClose={()=>setSelected(null)}>
-        <G cls="mp si" style={{maxWidth:420,padding:0,overflow:"hidden"}}>
-          {/* Mini profile card */}
-          <div style={{height:80,background:"linear-gradient(135deg,rgba(125,211,252,0.15),rgba(196,181,253,0.1))",borderRadius:"var(--r) var(--r) 0 0"}}/>
-          <div style={{padding:"0 20px 24px",marginTop:-30}}>
-            <Av src={selected.avatar_url} name={selected.name} size={60}
-              style={{border:"3px solid var(--bg,#1c1c1e)",boxShadow:"0 4px 12px rgba(0,0,0,0.3)"}}/>
-            <div style={{marginTop:10}}>
-              <div style={{fontSize:18,fontWeight:700,letterSpacing:-.3}}>{selected.name}</div>
-              {selected.course&&<div style={{fontSize:13,color:"var(--t2)",marginTop:2}}>{selected.course}</div>}
-              {selected.bio&&<div style={{fontSize:13,color:"var(--t2)",marginTop:8,lineHeight:1.5}}>{selected.bio}</div>}
-            </div>
-            {/* Follow button */}
-            <FollowBtn me={user} theirId={selected.id} style={{marginTop:16,width:"100%"}}/>
-            <button className="btn btn-g" style={{width:"100%",marginTop:8}}
-              onClick={()=>setSelected(null)}>Fechar</button>
-          </div>
-        </G>
-      </Modal>
-    )}
+    <div className="fg" style={{marginBottom:14}}><input className="inp" placeholder="Buscar pessoas..." value={search} onChange={e=>setSearch(e.target.value)}/></div>
+    {filtered.length===0?<G><div className="empty"><div style={{fontSize:32,marginBottom:8}}>👥</div><p>{search?"Nenhum resultado":"Nenhum outro usuário"}</p></div></G>
+      :filtered.map(u=><UserCard key={u.id} u={u} me={user} onView={()=>{setViewUser(u.id);setSub("profile");}}/>)}
   </div>);
 }
-
 
 function MyCommsTab({user}){
   const myIds=getUserComms(user.id);
@@ -2133,24 +1894,6 @@ function FriendsTab({user,setViewUser,setSub}){
     {friendUsers.length===0?<G><div className="empty"><div style={{fontSize:32,marginBottom:8}}>🤝</div><p style={{fontWeight:500}}>Nenhum amigo ainda</p><p style={{fontSize:13,color:"var(--t3)",marginTop:6}}>Quando você e alguém se seguirem mutuamente, viram amigos</p></div></G>
       :friendUsers.map(u=><UserCard key={u.id} u={u} me={user} onView={()=>{setViewUser(u.id);setSub("profile");}}/>)}
   </div>);
-}
-
-function FollowBtn({me,theirId,style={}}){
-  const [following,setFollowing]=useState(()=>isFollowing(me.id,theirId));
-  const [theyFollow,setTheyFollow]=useState(()=>isFollowing(theirId,me.id));
-  const mutual=following&&theyFollow;
-  const toggle=async()=>{
-    await toggleFollow(me.id,theirId);
-    setFollowing(f=>!f);SFX.follow();
-  };
-  return(
-    <button
-      className={`btn ${following?"btn-unfollow":"btn-follow"}`}
-      style={{...style}}
-      onClick={e=>{e.stopPropagation();toggle();}}>
-      {following?(mutual?"✓ Amigos":"✓ Seguindo"):"+ Seguir"}
-    </button>
-  );
 }
 
 function UserCard({u,me,onView}){
@@ -3307,155 +3050,25 @@ function FeedbackTab({user}){
         </button>
       </div>
 
-
-    </G>
-  </div>);
-}
-
-
-// ── Admin: Feedbacks ─────────────────────────────────────────────────────────
-function AdminFeedback(){
-  const [items,setItems]=useState([]);
-  const [loading,setLoading]=useState(true);
-  const [filter,setFilter]=useState("todos");
-  const [open,setOpen]=useState(null);
-
-  useEffect(()=>{
-    const load=async()=>{
-      if(USE_SUPABASE&&sb){
-        try{
-          const{data}=await sb.from("feedback").select("*").order("created_at",{ascending:false});
-          if(data)setItems(data);
-        }catch(e){console.warn("[SB] feedback",e.message);}
-      }
-      setLoading(false);
-    };
-    load();
-  },[]);
-
-  const TYPE_COLORS={"sugestao":"#7dd3fc","bug":"#fda4af","elogio":"#fcd34d","outro":"#c4b5fd"};
-  const TYPE_LABELS={"sugestao":"💡 Sugestão","bug":"🐛 Bug","elogio":"⭐ Elogio","outro":"💬 Outro"};
-
-  const filtered=filter==="todos"?items:items.filter(i=>i.type===filter);
-
-  const del=async(id)=>{
-    if(!USE_SUPABASE)return;
-    try{await sb.from("feedback").delete().eq("id",id);}catch(_){}
-    setItems(v=>v.filter(i=>i.id!==id));
-    setOpen(null);
-  };
-
-  return(<div>
-    <div className="sh">
-      <h2 style={{fontSize:15,color:"var(--t2)"}}>Feedbacks dos usuários</h2>
-      <div style={{fontSize:13,color:"var(--t2)"}}>{items.length} total</div>
-    </div>
-
-    {/* Filter tabs */}
-    <div className="stabs" style={{marginBottom:16}}>
-      {["todos","sugestao","bug","elogio","outro"].map(f=>(
-        <button key={f} className={`stab ${filter===f?"on":""}`} onClick={()=>setFilter(f)}>
-          {f==="todos"?"🗂 Todos":TYPE_LABELS[f]}
-        </button>
-      ))}
-    </div>
-
-    {loading
-      ?<G><div className="empty"><div style={{fontSize:24,marginBottom:8}}>⏳</div><p>Carregando...</p></div></G>
-      :filtered.length===0
-        ?<G><div className="empty"><div style={{fontSize:32,marginBottom:8}}>📭</div>
-          <p>{filter==="todos"?"Nenhum feedback ainda":"Nenhum feedback desse tipo"}</p></div></G>
-        :<div style={{display:"flex",flexDirection:"column",gap:8}}>
-          {filtered.map(item=>{
-            const tc=TYPE_COLORS[item.type]||"#cbd5e1";
-            const tl=TYPE_LABELS[item.type]||item.type;
-            return(
-              <div key={item.id} onClick={()=>setOpen(open?.id===item.id?null:item)}
-                style={{padding:"14px 16px",borderRadius:13,background:"var(--card-bg)",
-                  border:`1px solid ${open?.id===item.id?tc+"50":"var(--b2)"}`,
-                  cursor:"pointer",transition:"all .18s"}}>
-                <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:6}}>
-                  <span style={{padding:"2px 10px",borderRadius:20,fontSize:11,fontWeight:600,
-                    background:`${tc}20`,color:tc,border:`1px solid ${tc}40`}}>{tl}</span>
-                  <span style={{fontSize:12,fontWeight:600,color:"var(--t)"}}>{item.user_name}</span>
-                  <span style={{fontSize:11,color:"var(--t3)"}}>{item.user_email}</span>
-                  <span style={{fontSize:11,color:"var(--t3)",marginLeft:"auto"}}>
-                    {new Date(item.created_at).toLocaleDateString("pt-BR",{day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit"})}
-                  </span>
-                </div>
-                <div style={{fontSize:13,color:"var(--t2)",lineHeight:1.6,
-                  overflow:"hidden",maxHeight:open?.id===item.id?"none":"2.4em",
-                  WebkitLineClamp:open?.id===item.id?undefined:2,
-                  display:"-webkit-box",WebkitBoxOrient:"vertical"}}>
-                  {item.message}
-                </div>
-                {open?.id===item.id&&(
-                  <div style={{marginTop:12,display:"flex",justifyContent:"flex-end"}}>
-                    <button className="btn btn-del btn-sm" onClick={e=>{e.stopPropagation();del(item.id);}}>
-                      🗑 Apagar
-                    </button>
-                  </div>
-                )}
-              </div>
-            );
-          })}
+      <div style={{marginTop:24,padding:"16px",borderRadius:12,background:"var(--card-bg)",border:"1px solid var(--b2)"}}>
+        <div style={{fontSize:12,color:"var(--t2)",marginBottom:8,fontWeight:600}}>Outros canais</div>
+        <div style={{display:"flex",gap:10,flexWrap:"wrap"}}>
+          <a href="https://wa.me/551194398317?text=Olá!%20Tenho%20um%20feedback%20sobre%20o%20Study%20Vieira"
+            target="_blank" rel="noopener noreferrer"
+            style={{display:"inline-flex",alignItems:"center",gap:6,padding:"7px 14px",borderRadius:10,
+              background:"rgba(134,239,172,0.12)",border:"1px solid rgba(134,239,172,0.25)",
+              color:"#86efac",fontSize:12,fontWeight:500,textDecoration:"none"}}>
+            📱 WhatsApp
+          </a>
+          <a href="mailto:nathanvieiragg@outlook.com?subject=Feedback Study Vieira"
+            target="_blank" rel="noopener noreferrer"
+            style={{display:"inline-flex",alignItems:"center",gap:6,padding:"7px 14px",borderRadius:10,
+              background:"rgba(125,211,252,0.12)",border:"1px solid rgba(125,211,252,0.25)",
+              color:"#7dd3fc",fontSize:12,fontWeight:500,textDecoration:"none"}}>
+            📧 E-mail
+          </a>
         </div>
-    }
-  </div>);
-}
-
-
-// ══════════════════════════════════════════════════════════════════════════════
-//  APOIE-NOS — Buy Me a Coffee
-// ══════════════════════════════════════════════════════════════════════════════
-function SupportTab(){
-  const BMC_USER = "studyvieira"; // ← troca pelo seu usuário do Buy Me a Coffee
-
-  return(<div className="fu">
-    <G style={{padding:28,maxWidth:500,margin:"0 auto",textAlign:"center"}}>
-      <div style={{fontSize:48,marginBottom:12}}>☕</div>
-      <h2 style={{fontSize:22,fontWeight:700,marginBottom:10,letterSpacing:-.3}}>Apoie o Study Vieira</h2>
-      <p style={{fontSize:14,color:"var(--t2)",lineHeight:1.7,marginBottom:24}}>
-        O Study Vieira é desenvolvido com muito carinho e dedicação.<br/>
-        Sua contribuição ajuda a manter o servidor no ar, implementar novas funcionalidades
-        e melhorar a experiência de todos os estudantes. 🚀
-      </p>
-
-      {/* Buy Me a Coffee button */}
-      <a href={`https://www.buymeacoffee.com/${BMC_USER}`} target="_blank" rel="noopener noreferrer"
-        style={{display:"inline-flex",alignItems:"center",gap:10,padding:"14px 28px",
-          borderRadius:14,background:"#FFDD00",color:"#000",fontWeight:700,fontSize:16,
-          textDecoration:"none",boxShadow:"0 4px 20px rgba(255,221,0,0.35)",
-          transition:"all .2s",border:"none",cursor:"pointer",marginBottom:28}}
-        onMouseEnter={e=>e.currentTarget.style.transform="scale(1.04)"}
-        onMouseLeave={e=>e.currentTarget.style.transform="scale(1)"}>
-        ☕ Me pague um café
-      </a>
-
-      {/* What the support helps */}
-      <div style={{textAlign:"left",background:"var(--card-bg)",border:"1px solid var(--b2)",borderRadius:14,padding:20,marginBottom:20}}>
-        <div style={{fontSize:13,fontWeight:600,color:"var(--t2)",marginBottom:12,textTransform:"uppercase",letterSpacing:.5}}>
-          Sua doação ajuda a:
-        </div>
-        {[
-          {icon:"🖥️", text:"Manter os servidores no ar 24/7"},
-          {icon:"⚡", text:"Implementar novas funcionalidades"},
-          {icon:"🐛", text:"Corrigir bugs mais rapidamente"},
-          {icon:"📱", text:"Melhorar a experiência mobile"},
-          {icon:"🤝", text:"Manter o app gratuito para todos"},
-        ].map((item,i)=>(
-          <div key={i} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 0",
-            borderBottom:i<4?"1px solid var(--b2)":"none"}}>
-            <span style={{fontSize:18}}>{item.icon}</span>
-            <span style={{fontSize:13,color:"var(--t2)"}}>{item.text}</span>
-          </div>
-        ))}
       </div>
-
-      <p style={{fontSize:12,color:"var(--t3)",lineHeight:1.6}}>
-        Qualquer valor é bem-vindo e faz diferença! 💙<br/>
-        O pagamento é processado com segurança pelo Buy Me a Coffee.
-      </p>
     </G>
   </div>);
 }
