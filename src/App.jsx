@@ -679,26 +679,16 @@ body{font-family:'Figtree',-apple-system,sans-serif;background:var(--bg);min-hei
 .si{animation:si .25s cubic-bezier(.22,1,.36,1) both;}
 ::-webkit-scrollbar{width:5px;}
 ::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.09);border-radius:3px;}
-/* ── Mobile block — CSS only, no JS ── */
+/* ── Mobile block — CSS only ── */
+.mobile-msg{display:none;}
 @media(max-width:550px){
   .app,.nav,.wrap{display:none!important;}
-  body::before{
-    content:'';position:fixed;inset:0;background:#1c1c1e;z-index:9999;
-  }
-  body::after{
-    content:'📱';position:fixed;top:50%;left:50%;
-    transform:translate(-50%,-60%);
-    font-size:64px;z-index:10000;
-  }
   .mobile-msg{
-    display:flex!important;
+    display:flex;position:fixed;inset:0;z-index:9999;
+    flex-direction:column;align-items:center;justify-content:center;
+    background:#1c1c1e;padding:40px 32px;text-align:center;
+    font-family:'Figtree',-apple-system,sans-serif;
   }
-}
-.mobile-msg{
-  display:none;position:fixed;inset:0;z-index:10001;
-  flex-direction:column;align-items:center;justify-content:center;
-  background:#1c1c1e;padding:32px;text-align:center;
-  font-family:'Figtree',-apple-system,sans-serif;
 }
 `;
 
