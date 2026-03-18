@@ -1071,7 +1071,7 @@ export default function App(){
           {tab==="perfil"    &&<div key="p" className="page-enter"><ProfileTab    user={user} setUser={(u)=>{DB.set(K.session,u);setUser(u);}}/></div>}
           {tab==="admin"     &&<div key="ad" className="page-enter"><AdminTab      user={user} refreshUser={refreshUser}/></div>}
           {tab==="feedback"  &&<div key="fb" className="page-enter"><FeedbackTab   user={user}/></div>}
-          {tab==="apoio"     &&<div key="ap" className="page-enter"><SupportTab/></div>}
+          {tab==="apoio"     &&<div key="ap" className="page-enter"><SupportTab user={user}/></div>}
         </div>
       </>}
       {/* Mobile bottom navigation */}
@@ -3133,26 +3133,8 @@ function ProfileTab({user,setUser}){
                 ☕ Apoiador
               </div>
             )}
-            {donorStatus?.status==="pending"&&(
-              <div style={{display:"inline-flex",alignItems:"center",gap:5,padding:"3px 10px",borderRadius:20,
-                background:"rgba(255,255,255,0.06)",border:"1px solid var(--b2)",color:"var(--t3)",fontSize:11,fontWeight:500}}>
-                ⏳ Aguardando confirmação
-              </div>
-            )}
           </div>
           {prof.bio&&<div style={{fontSize:13,color:"var(--t2)",marginTop:8,lineHeight:1.5}}>{prof.bio}</div>}
-          {/* Botão enviar comprovante */}
-          {(!donorStatus||donorStatus.status==="expired")&&(
-            <button className="btn btn-g btn-sm" style={{marginTop:12,fontSize:12}}
-              onClick={()=>setShowDonorModal(true)}>
-              ☕ Já doei — enviar comprovante
-            </button>
-          )}
-          {donorStatus?.status==="confirmed"&&donorStatus.expires_at&&(
-            <div style={{fontSize:11,color:"var(--t3)",marginTop:8}}>
-              Apoio válido até {new Date(donorStatus.expires_at).toLocaleDateString("pt-BR",{day:"2-digit",month:"long",year:"numeric"})}
-            </div>
-          )}
         </>)}
         </div>{/* /padding */}
       </div>{/* /relative */}
@@ -3167,11 +3149,6 @@ function ProfileTab({user,setUser}){
     <G style={{padding:20,marginTop:14}}>
       <StudyStats userId={user.id} subjects={subjects}/>
     </G>
-    {/* Modal envio de comprovante */}
-    {showDonorModal&&(
-      <DonorProofModal user={user} onClose={()=>setShowDonorModal(false)}
-        onSent={()=>{setDonorStatus({status:"pending"});setShowDonorModal(false);}}/>
-    )}
   </div>);
 }
 
@@ -4254,8 +4231,20 @@ function AdminDonors({user:adminUser}){
   </div>);
 }
 
-function SupportTab(){
+function SupportTab({user}){
   const BMC_USER = "vieiratechbr";
+  const [donorStatus,setDonorStatus]=useState(null);
+  const [showDonorModal,setShowDonorModal]=useState(false);
+
+  useEffect(()=>{
+    if(!USE_SUPABASE||!sb||!user) return;
+    sb.from("donors").select("status,expires_at").eq("user_id",user.id).maybeSingle()
+      .then(({data})=>{
+        if(!data){setDonorStatus(null);return;}
+        if(data.expires_at&&new Date(data.expires_at)<new Date()){setDonorStatus({status:"expired"});return;}
+        setDonorStatus(data);
+      }).catch(()=>{});
+  },[user?.id]);
 
   return(<div className="fu">
     <G style={{padding:28,maxWidth:500,margin:"0 auto",textAlign:"center"}}>
@@ -4278,7 +4267,7 @@ function SupportTab(){
         ☕ Me pague um café
       </a>
 
-      {/* What the support helps */}
+      {/* O que a doação ajuda */}
       <div style={{textAlign:"left",background:"var(--card-bg)",border:"1px solid var(--b2)",borderRadius:14,padding:20,marginBottom:20}}>
         <div style={{fontSize:13,fontWeight:600,color:"var(--t2)",marginBottom:12,textTransform:"uppercase",letterSpacing:.5}}>
           Sua doação ajuda a:
@@ -4298,11 +4287,57 @@ function SupportTab(){
         ))}
       </div>
 
-      <p style={{fontSize:12,color:"var(--t3)",lineHeight:1.6}}>
+      <p style={{fontSize:12,color:"var(--t3)",lineHeight:1.6,marginBottom:24}}>
         Qualquer valor é bem-vindo e faz diferença! 💙<br/>
         O pagamento é processado com segurança pelo Buy Me a Coffee.
       </p>
+
+      {/* ─── Seção de comprovante ─── */}
+      <div style={{borderTop:"1px solid var(--b2)",paddingTop:24}}>
+        {donorStatus?.status==="confirmed"?(
+          <div style={{background:"linear-gradient(135deg,rgba(252,211,77,0.10),rgba(251,146,60,0.08))",
+            border:"1px solid rgba(252,211,77,0.28)",borderRadius:14,padding:20}}>
+            <div style={{fontSize:28,marginBottom:8}}>☕</div>
+            <div style={{fontSize:15,fontWeight:700,color:"#fcd34d",marginBottom:6}}>Você é um Apoiador!</div>
+            <div style={{fontSize:13,color:"var(--t2)",lineHeight:1.6}}>
+              Obrigado pelo apoio. Seu badge aparece no seu perfil.
+            </div>
+            {donorStatus.expires_at&&(
+              <div style={{fontSize:11,color:"var(--t3)",marginTop:8}}>
+                Válido até {new Date(donorStatus.expires_at).toLocaleDateString("pt-BR",{day:"2-digit",month:"long",year:"numeric"})}
+              </div>
+            )}
+          </div>
+        ):donorStatus?.status==="pending"?(
+          <div style={{background:"rgba(255,255,255,0.04)",border:"1px solid var(--b2)",borderRadius:14,padding:20}}>
+            <div style={{fontSize:24,marginBottom:8}}>⏳</div>
+            <div style={{fontSize:14,fontWeight:600,marginBottom:4}}>Comprovante enviado!</div>
+            <div style={{fontSize:13,color:"var(--t2)"}}>
+              Estamos analisando. Você recebe o badge assim que confirmarmos.
+            </div>
+          </div>
+        ):(
+          <div style={{background:"rgba(252,211,77,0.04)",border:"1px dashed rgba(252,211,77,0.25)",borderRadius:14,padding:20}}>
+            <div style={{fontSize:22,marginBottom:8}}>🎖️</div>
+            <div style={{fontSize:14,fontWeight:600,marginBottom:6}}>Já doou? Ganhe seu badge!</div>
+            <div style={{fontSize:13,color:"var(--t2)",marginBottom:16,lineHeight:1.6}}>
+              Envie o print da confirmação do Buy Me a Coffee e ganhe o badge exclusivo de <strong style={{color:"#fcd34d"}}>☕ Apoiador</strong> no seu perfil por 1 ano.
+            </div>
+            <button className="btn" style={{width:"100%",
+              background:"linear-gradient(135deg,rgba(252,211,77,0.20),rgba(251,146,60,0.14))",
+              color:"#fcd34d",border:"1px solid rgba(252,211,77,0.32)",fontWeight:600,fontSize:14}}
+              onClick={()=>setShowDonorModal(true)}>
+              ☕ Já doei — enviar comprovante
+            </button>
+          </div>
+        )}
+      </div>
     </G>
+
+    {showDonorModal&&(
+      <DonorProofModal user={user} onClose={()=>setShowDonorModal(false)}
+        onSent={()=>{setDonorStatus({status:"pending"});setShowDonorModal(false);}}/>
+    )}
   </div>);
 }
 
