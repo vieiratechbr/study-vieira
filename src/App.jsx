@@ -1378,12 +1378,13 @@ function AdminTab({user,refreshUser}){
   if(!isAdmin(user))return(<div className="fu"><G><div className="empty"><div style={{fontSize:36,marginBottom:10}}>🔒</div><p>Acesso restrito</p></div></G></div>);
   const [sub,setSub]=useState("avisos");
   const tabs=[
-    {k:"avisos",  l:"📢 Avisos Globais"},
-    {k:"comms",   l:"🏫 Comunidades"},
-    {k:"users",   l:"👥 Usuários & Punições"},
-    {k:"admins",  l:"⭐ Administradores"},
-    {k:"feedback",l:"📬 Feedbacks"},
-    {k:"logs",    l:"📋 Logs"},
+    {k:"avisos",   l:"📢 Avisos Globais"},
+    {k:"comms",    l:"🏫 Comunidades"},
+    {k:"users",    l:"👥 Usuários & Punições"},
+    {k:"admins",   l:"⭐ Administradores"},
+    {k:"feedback", l:"📬 Feedbacks"},
+    {k:"apoiadores",l:"☕ Apoiadores"},
+    {k:"logs",     l:"📋 Logs"},
   ];
   return(<div className="fu">
     <div style={{marginBottom:18}}>
@@ -1396,12 +1397,13 @@ function AdminTab({user,refreshUser}){
     <div className="stabs" style={{marginBottom:24}}>
       {tabs.map(t=><button key={t.k} className={`stab ${sub===t.k?"on":""}`} onClick={()=>setSub(t.k)}>{t.l}</button>)}
     </div>
-    {sub==="avisos" &&<AdminPosts     user={user}/>}
-    {sub==="comms"  &&<AdminComms     user={user}/>}
-    {sub==="users"  &&<AdminUsers     user={user}/>}
-    {sub==="admins"   &&<AdminAdmins    user={user}/>}
-    {sub==="feedback" &&<AdminFeedback  user={user}/>}
-    {sub==="logs"     &&<AdminLogs      user={user}/>}
+    {sub==="avisos"     &&<AdminPosts     user={user}/>}
+    {sub==="comms"      &&<AdminComms     user={user}/>}
+    {sub==="users"      &&<AdminUsers     user={user}/>}
+    {sub==="admins"     &&<AdminAdmins    user={user}/>}
+    {sub==="feedback"   &&<AdminFeedback  user={user}/>}
+    {sub==="apoiadores" &&<AdminDonors    user={user}/>}
+    {sub==="logs"       &&<AdminLogs      user={user}/>}
   </div>);
 }
 
@@ -2559,16 +2561,22 @@ function UserProfileView({uid:targetId,me,onBack}){
   const [profLoading,setProfLoading]=useState(USE_SUPABASE);
   useEffect(()=>{
     if(!USE_SUPABASE||!sb){setProfLoading(false);return;}
-    sb.from("profiles").select("*").eq("id",targetId).maybeSingle()
-      .then(({data:p})=>{
+    Promise.all([
+      sb.from("profiles").select("*").eq("id",targetId).maybeSingle(),
+      sb.from("donors").select("status,expires_at").eq("user_id",targetId).eq("status","confirmed").maybeSingle()
+    ]).then(([{data:p},{data:donor}])=>{
+        const isDonor=!!donor&&(!donor.expires_at||new Date(donor.expires_at)>new Date());
         if(p){
           const fresh={
             avatar:p.avatar_url||null, bio:p.bio||"",
             banner:p.banner||null, bannerImg:p.banner_img||null,
-            gender:p.gender||null, age:p.age||null, course:p.course||null
+            gender:p.gender||null, age:p.age||null, course:p.course||null,
+            _isDonor:isDonor
           };
           _LS.set(`sv5_prof_${targetId}`,fresh);
           setProf(fresh);
+        }else if(isDonor){
+          setProf(prev=>({...prev,_isDonor:true}));
         }
         setProfLoading(false);
       })
@@ -2617,10 +2625,18 @@ function UserProfileView({uid:targetId,me,onBack}){
         {mutual&&<div style={{fontSize:12,color:"#86efac",marginTop:3}}>🤝 Vocês são amigos</div>}
         {!mutual&&theyFollow&&<div style={{fontSize:12,color:"#7dd3fc",marginTop:3}}>Segue você</div>}
         {/* Detalhes extras do perfil */}
-        <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:6}}>
+        <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:6,alignItems:"center"}}>
           {prof.age&&<Pill color="#7dd3fc" label={`${prof.age} anos`}/>}
           {prof.gender&&prof.gender!=="Prefiro não dizer"&&<Pill color="#c4b5fd" label={prof.gender}/>}
           {prof.course&&<Pill color="#86efac" label={prof.course}/>}
+          {/* Badge apoiador — buscado junto com o perfil */}
+          {prof._isDonor&&(
+            <div style={{display:"inline-flex",alignItems:"center",gap:5,padding:"3px 10px",borderRadius:20,
+              background:"linear-gradient(135deg,rgba(252,211,77,0.18),rgba(251,146,60,0.14))",
+              border:"1px solid rgba(252,211,77,0.38)",color:"#fcd34d",fontSize:11,fontWeight:700,letterSpacing:.3}}>
+              ☕ Apoiador
+            </div>
+          )}
         </div>
         {prof.bio&&<div style={{fontSize:13,color:"var(--t2)",marginTop:8,lineHeight:1.5}}>{prof.bio}</div>}
       </div>
@@ -2930,6 +2946,9 @@ function ProfileTab({user,setUser}){
   const [age,setAge]=useState(prof.age||"");
   const [course,setCourse]=useState(prof.course||"");
   const [ok,setOk]=useState("");
+  // Apoiador
+  const [donorStatus,setDonorStatus]=useState(null); // null | {status,expires_at}
+  const [showDonorModal,setShowDonorModal]=useState(false);
 
   // Re-read profile from Supabase on mount to get fresh data
   useEffect(()=>{
@@ -2947,6 +2966,18 @@ function ProfileTab({user,setUser}){
       setAge(fresh.age);
       setCourse(fresh.course);
     }).catch(()=>{});
+  },[user.id]);
+
+  // Busca status de apoiador
+  useEffect(()=>{
+    if(!USE_SUPABASE||!sb) return;
+    sb.from("donors").select("status,expires_at,proof_url").eq("user_id",user.id).maybeSingle()
+      .then(({data})=>{
+        if(!data){setDonorStatus(null);return;}
+        // Expirou?
+        if(data.expires_at&&new Date(data.expires_at)<new Date()){setDonorStatus({status:"expired"});return;}
+        setDonorStatus(data);
+      }).catch(()=>{});
   },[user.id]);
   const avatarFileRef=useRef(null);
   const bannerFileRef=useRef(null);
@@ -3089,13 +3120,39 @@ function ProfileTab({user,setUser}){
         </>):(<>
           <div style={{fontSize:18,fontWeight:700,letterSpacing:-.3}}>{user.name}</div>
           <div style={{fontSize:13,color:"var(--t2)",marginTop:2}}>{user.email}</div>
-          <div style={{display:"flex",gap:8,marginTop:6,flexWrap:"wrap"}}>
+          <div style={{display:"flex",gap:8,marginTop:6,flexWrap:"wrap",alignItems:"center"}}>
             {prof.age&&<Pill color="#7dd3fc" label={`${prof.age} anos`}/>}
             {prof.gender&&prof.gender!=="Prefiro não dizer"&&<Pill color="#c4b5fd" label={prof.gender}/>}
             {prof.course&&<Pill color="#86efac" label={prof.course}/>}
             {isAdmin(user)&&<div className="adm-badge">ADM</div>}
+            {/* Badge de apoiador */}
+            {donorStatus?.status==="confirmed"&&(
+              <div style={{display:"inline-flex",alignItems:"center",gap:5,padding:"3px 10px",borderRadius:20,
+                background:"linear-gradient(135deg,rgba(252,211,77,0.18),rgba(251,146,60,0.14))",
+                border:"1px solid rgba(252,211,77,0.38)",color:"#fcd34d",fontSize:11,fontWeight:700,letterSpacing:.3}}>
+                ☕ Apoiador
+              </div>
+            )}
+            {donorStatus?.status==="pending"&&(
+              <div style={{display:"inline-flex",alignItems:"center",gap:5,padding:"3px 10px",borderRadius:20,
+                background:"rgba(255,255,255,0.06)",border:"1px solid var(--b2)",color:"var(--t3)",fontSize:11,fontWeight:500}}>
+                ⏳ Aguardando confirmação
+              </div>
+            )}
           </div>
           {prof.bio&&<div style={{fontSize:13,color:"var(--t2)",marginTop:8,lineHeight:1.5}}>{prof.bio}</div>}
+          {/* Botão enviar comprovante */}
+          {(!donorStatus||donorStatus.status==="expired")&&(
+            <button className="btn btn-g btn-sm" style={{marginTop:12,fontSize:12}}
+              onClick={()=>setShowDonorModal(true)}>
+              ☕ Já doei — enviar comprovante
+            </button>
+          )}
+          {donorStatus?.status==="confirmed"&&donorStatus.expires_at&&(
+            <div style={{fontSize:11,color:"var(--t3)",marginTop:8}}>
+              Apoio válido até {new Date(donorStatus.expires_at).toLocaleDateString("pt-BR",{day:"2-digit",month:"long",year:"numeric"})}
+            </div>
+          )}
         </>)}
         </div>{/* /padding */}
       </div>{/* /relative */}
@@ -3110,6 +3167,11 @@ function ProfileTab({user,setUser}){
     <G style={{padding:20,marginTop:14}}>
       <StudyStats userId={user.id} subjects={subjects}/>
     </G>
+    {/* Modal envio de comprovante */}
+    {showDonorModal&&(
+      <DonorProofModal user={user} onClose={()=>setShowDonorModal(false)}
+        onSent={()=>{setDonorStatus({status:"pending"});setShowDonorModal(false);}}/>
+    )}
   </div>);
 }
 
@@ -3997,6 +4059,201 @@ function PostComments({postId,postType="global",user}){
 // ══════════════════════════════════════════════════════════════════════════════
 //  APOIE-NOS — Buy Me a Coffee
 // ══════════════════════════════════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════════════════════════
+//  DONOR PROOF MODAL — usuário envia print da doação
+// ══════════════════════════════════════════════════════════════════════════════
+function DonorProofModal({user,onClose,onSent}){
+  const [img,setImg]=useState(null);
+  const [note,setNote]=useState("");
+  const [sending,setSending]=useState(false);
+  const [err,setErr]=useState("");
+  const fileRef=useRef(null);
+
+  const handleFile=async(e)=>{
+    const file=e.target.files[0];if(!file)return;
+    const compressed=await compressImage(file,1200,0.82);
+    setImg(compressed);
+  };
+
+  const send=async()=>{
+    if(!img){setErr("Adicione um print do comprovante.");return;}
+    setSending(true);setErr("");
+    try{
+      if(USE_SUPABASE&&sb){
+        const{error}=await sb.from("donors").upsert({
+          user_id:user.id,user_name:user.name,user_email:user.email,
+          status:"pending",proof_url:img,note:note.trim()||null,
+          submitted_at:new Date().toISOString(),expires_at:null,confirmed_by:null,confirmed_at:null
+        });
+        if(error) throw new Error(error.message);
+      }
+      SFX.save();onSent();
+    }catch(e){setErr("Erro ao enviar. Tente novamente.");setSending(false);}
+  };
+
+  return(
+    <Modal onClose={onClose}>
+      <G cls="mp si" style={{maxWidth:460,padding:0,overflow:"hidden"}} onClick={e=>e.stopPropagation()}>
+        {/* Header dourado */}
+        <div style={{background:"linear-gradient(135deg,rgba(252,211,77,0.14),rgba(251,146,60,0.10))",
+          borderBottom:"1px solid rgba(252,211,77,0.20)",padding:"20px 24px"}}>
+          <div style={{fontSize:28,marginBottom:6}}>☕</div>
+          <h3 style={{margin:0,fontSize:17,fontWeight:700,color:"#fcd34d"}}>Enviar comprovante de doação</h3>
+          <p style={{margin:"6px 0 0",fontSize:13,color:"rgba(255,255,255,0.5)",lineHeight:1.5}}>
+            Após confirmarmos sua doação, você ganha o badge de <strong style={{color:"#fcd34d"}}>Apoiador</strong> por 1 ano.
+          </p>
+        </div>
+
+        <div style={{padding:24}}>
+          {err&&<div className="er">{err}</div>}
+
+          {/* Upload do print */}
+          <input ref={fileRef} type="file" accept="image/*" style={{display:"none"}} onChange={handleFile}/>
+          <div onClick={()=>fileRef.current?.click()}
+            style={{width:"100%",minHeight:160,borderRadius:12,border:"2px dashed rgba(252,211,77,0.30)",
+              background:"rgba(252,211,77,0.04)",cursor:"pointer",display:"flex",
+              alignItems:"center",justifyContent:"center",overflow:"hidden",marginBottom:16,position:"relative"}}>
+            {img
+              ?<><img src={img} style={{width:"100%",objectFit:"cover",display:"block",maxHeight:240}} alt="comprovante"/>
+                <div style={{position:"absolute",inset:0,background:"rgba(0,0,0,0.35)",display:"flex",
+                  alignItems:"center",justifyContent:"center"}}>
+                  <span style={{color:"rgba(255,255,255,0.85)",fontSize:13,fontWeight:600,background:"rgba(0,0,0,0.4)",
+                    padding:"5px 12px",borderRadius:16}}>✎ Trocar imagem</span>
+                </div></>
+              :<div style={{textAlign:"center",padding:24}}>
+                <div style={{fontSize:36,marginBottom:8}}>🖼️</div>
+                <div style={{fontSize:14,fontWeight:600,color:"#fcd34d",marginBottom:4}}>Toque para adicionar o print</div>
+                <div style={{fontSize:12,color:"var(--t3)"}}>Print da tela de confirmação do Buy Me a Coffee</div>
+              </div>}
+          </div>
+
+          <div className="fg" style={{marginBottom:20}}>
+            <label>Observação (opcional)</label>
+            <input className="inp" placeholder="ex: Doei hoje às 14h, R$ 10" value={note} onChange={e=>setNote(e.target.value)}/>
+          </div>
+
+          <div style={{display:"flex",gap:8}}>
+            <button className="btn" style={{flex:1,background:"linear-gradient(135deg,rgba(252,211,77,0.22),rgba(251,146,60,0.16))",
+              color:"#fcd34d",border:"1px solid rgba(252,211,77,0.30)",fontWeight:600}}
+              onClick={send} disabled={sending||!img}>
+              {sending?"Enviando...":"Enviar comprovante ☕"}
+            </button>
+            <button className="btn btn-g" onClick={onClose}>Cancelar</button>
+          </div>
+
+          <p style={{fontSize:11,color:"var(--t3)",textAlign:"center",marginTop:12,lineHeight:1.6}}>
+            Analisamos os comprovantes manualmente. O badge aparece no seu perfil após a confirmação.
+          </p>
+        </div>
+      </G>
+    </Modal>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+//  ADMIN: APOIADORES
+// ══════════════════════════════════════════════════════════════════════════════
+function AdminDonors({user:adminUser}){
+  const [donors,setDonors]=useState([]);
+  const [loading,setLoading]=useState(true);
+  const [filter,setFilter]=useState("pending");
+  const [open,setOpen]=useState(null);
+
+  const load=useCallback(async()=>{
+    if(!USE_SUPABASE||!sb){setLoading(false);return;}
+    const{data}=await sb.from("donors").select("*").order("submitted_at",{ascending:false});
+    setDonors(data||[]);setLoading(false);
+  },[]);
+  useEffect(()=>{load();},[load]);
+
+  const confirm=async(d)=>{
+    const expiresAt=new Date();expiresAt.setFullYear(expiresAt.getFullYear()+1);
+    await sb.from("donors").update({
+      status:"confirmed",confirmed_by:adminUser.name,
+      confirmed_at:new Date().toISOString(),
+      expires_at:expiresAt.toISOString()
+    }).eq("user_id",d.user_id);
+    await logAdmin(adminUser.email,adminUser.name,"confirm_donor",d.user_email,"1 ano");
+    setDonors(prev=>prev.map(x=>x.user_id===d.user_id?{...x,status:"confirmed",expires_at:expiresAt.toISOString()}:x));
+    setOpen(null);SFX.save();
+  };
+
+  const reject=async(d)=>{
+    await sb.from("donors").update({status:"rejected",confirmed_by:adminUser.name,confirmed_at:new Date().toISOString()}).eq("user_id",d.user_id);
+    await logAdmin(adminUser.email,adminUser.name,"reject_donor",d.user_email,"");
+    setDonors(prev=>prev.map(x=>x.user_id===d.user_id?{...x,status:"rejected"}:x));
+    setOpen(null);SFX.close();
+  };
+
+  const filtered=filter==="todos"?donors:donors.filter(d=>d.status===filter);
+  const pending=donors.filter(d=>d.status==="pending").length;
+
+  const STATUS_LABEL={pending:"⏳ Pendente",confirmed:"✅ Confirmado",rejected:"❌ Rejeitado",expired:"📅 Expirado"};
+  const STATUS_COLOR={pending:"#fcd34d",confirmed:"#86efac",rejected:"#fda4af",expired:"#cbd5e1"};
+
+  return(<div>
+    <div className="sh">
+      <h2 style={{fontSize:15,color:"var(--t2)"}}>Apoiadores</h2>
+      {pending>0&&<div style={{padding:"3px 10px",borderRadius:20,background:"rgba(252,211,77,0.15)",
+        border:"1px solid rgba(252,211,77,0.28)",color:"#fcd34d",fontSize:12,fontWeight:600}}>
+        {pending} pendente{pending!==1?"s":""}
+      </div>}
+    </div>
+
+    <div className="stabs" style={{marginBottom:16}}>
+      {[{k:"pending",l:"⏳ Pendentes"},{k:"confirmed",l:"✅ Confirmados"},{k:"rejected",l:"❌ Rejeitados"},{k:"todos",l:"🗂 Todos"}].map(f=>(
+        <button key={f.k} className={`stab ${filter===f.k?"on":""}`} onClick={()=>setFilter(f.k)}>{f.l}</button>
+      ))}
+    </div>
+
+    {loading?<G><div className="empty"><div style={{fontSize:22,marginBottom:8}}>⏳</div><p>Carregando...</p></div></G>
+      :filtered.length===0?<G><div className="empty"><div style={{fontSize:32,marginBottom:8}}>☕</div>
+        <p>{filter==="pending"?"Nenhum comprovante aguardando":"Nenhum registro aqui"}</p></div></G>
+      :<div style={{display:"flex",flexDirection:"column",gap:8}}>
+        {filtered.map(d=>{
+          const c=STATUS_COLOR[d.status]||"#cbd5e1";
+          return(
+            <div key={d.user_id} onClick={()=>setOpen(open?.user_id===d.user_id?null:d)}
+              style={{padding:"14px 16px",borderRadius:13,background:"var(--card-bg)",
+                border:`1px solid ${open?.user_id===d.user_id?c+"50":"var(--b2)"}`,cursor:"pointer",transition:"all .18s"}}>
+              <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:open?.user_id===d.user_id?12:0}}>
+                <Av name={d.user_name} size={38}/>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:14,fontWeight:600}}>{d.user_name}</div>
+                  <div style={{fontSize:12,color:"var(--t2)"}}>{d.user_email}</div>
+                </div>
+                <span style={{padding:"2px 10px",borderRadius:20,fontSize:11,fontWeight:600,
+                  background:`${c}20`,color:c,border:`1px solid ${c}40`,flexShrink:0}}>
+                  {STATUS_LABEL[d.status]||d.status}
+                </span>
+              </div>
+              {open?.user_id===d.user_id&&(<>
+                {/* Print do comprovante */}
+                {d.proof_url&&<img src={d.proof_url} style={{width:"100%",borderRadius:10,objectFit:"cover",maxHeight:300,display:"block",marginBottom:12}} alt="comprovante"/>}
+                {d.note&&<div style={{fontSize:13,color:"var(--t2)",marginBottom:12,padding:"8px 12px",background:"rgba(255,255,255,0.04)",borderRadius:8}}>{d.note}</div>}
+                <div style={{fontSize:11,color:"var(--t3)",marginBottom:12}}>
+                  Enviado em {new Date(d.submitted_at).toLocaleString("pt-BR",{day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit"})}
+                  {d.confirmed_at&&<span> · Confirmado por {d.confirmed_by} em {new Date(d.confirmed_at).toLocaleDateString("pt-BR")}</span>}
+                  {d.expires_at&&<span> · Expira em {new Date(d.expires_at).toLocaleDateString("pt-BR",{day:"2-digit",month:"long",year:"numeric"})}</span>}
+                </div>
+                {d.status==="pending"&&(
+                  <div style={{display:"flex",gap:8}}>
+                    <button className="btn" style={{flex:1,background:"rgba(134,239,172,0.14)",color:"#86efac",border:"1px solid rgba(134,239,172,0.28)",fontWeight:600}}
+                      onClick={e=>{e.stopPropagation();confirm(d);}}>✅ Confirmar doação</button>
+                    <button className="btn btn-del" onClick={e=>{e.stopPropagation();reject(d);}}>❌ Rejeitar</button>
+                  </div>
+                )}
+                {d.status==="confirmed"&&(
+                  <button className="btn btn-del btn-sm" onClick={e=>{e.stopPropagation();reject(d);}}>Revogar benefício</button>
+                )}
+              </>)}
+            </div>
+          );
+        })}
+      </div>}
+  </div>);
+}
+
 function SupportTab(){
   const BMC_USER = "vieiratechbr";
 
