@@ -1102,18 +1102,38 @@ function AuthPage({onLogin}){
   const [pass,setPass]=useState("");
   const [err,setErr]=useState("");
   const [loading,setLoading]=useState(false);
-  // Confirmação de e-mail: após cadastro no Supabase, aguarda verificação
-  const [awaitingConfirm,setAwaitingConfirm]=useState(false);
   const mounted=useRef(true);
   useEffect(()=>{mounted.current=true;return()=>{mounted.current=false;};},[]);
-
   const safe=(fn)=>{ if(mounted.current) fn(); };
+
+  // step: "form" | "verify"
+  const [step,setStep]=useState("form");
+  const [code,setCode]=useState("");
+  const [codeErr,setCodeErr]=useState("");
+  const [codeLoading,setCodeLoading]=useState(false);
+  const pendingRef=useRef({name:"",email:"",pass:"",userId:""});
+  const [timer,setTimer]=useState(0);
+  const timerRef=useRef(null);
+  const startTimer=()=>{
+    setTimer(900);
+    clearInterval(timerRef.current);
+    timerRef.current=setInterval(()=>{
+      setTimer(t=>{if(t<=1){clearInterval(timerRef.current);return 0;}return t-1;});
+    },1000);
+  };
+  useEffect(()=>()=>clearInterval(timerRef.current),[]);
+  const fmtTimer=(s)=>`${String(Math.floor(s/60)).padStart(2,"0")}:${String(s%60).padStart(2,"0")}`;
+  const expired=timer===0&&step==="verify";
+
+  const sendOTP=async(emailAddr)=>{
+    const{error}=await sb.auth.signInWithOtp({email:emailAddr,options:{shouldCreateUser:false}});
+    if(error&&!error.message.toLowerCase().includes("not found")&&!error.message.toLowerCase().includes("invalid")) throw error;
+  };
 
   const submit=async()=>{
     safe(()=>{setErr("");setLoading(true);});
     try{
       if(!USE_SUPABASE){
-        // LocalStorage mode
         const users=DB.get(K.users)||{};
         if(mode==="cadastro"){
           if(!name.trim()||!email.trim()||!pass.trim()){safe(()=>{setErr("Preencha todos os campos.");setLoading(false);});SFX.error();return;}
@@ -1124,118 +1144,112 @@ function AuthPage({onLogin}){
         }else{
           if(!email.trim()||!pass.trim()){safe(()=>{setErr("Preencha e-mail e senha.");setLoading(false);});SFX.error();return;}
           const te=email.trim().toLowerCase();
-          if(te===FOUNDER){
-            if(pass!==FOUNDER_PASS){safe(()=>{setErr("Senha incorreta.");setLoading(false);});SFX.error();return;}
-            onLogin({id:FOUNDER_ID,name:"Admin Study Vieira",email:FOUNDER,isAdm:true});return;
-          }
+          if(te===FOUNDER){if(pass!==FOUNDER_PASS){safe(()=>{setErr("Senha incorreta.");setLoading(false);});SFX.error();return;}onLogin({id:FOUNDER_ID,name:"Admin Study Vieira",email:FOUNDER,isAdm:true});return;}
           const u=users[te]||users[email.trim()];
           if(!u||u.pass!==pass){safe(()=>{setErr("Credenciais inválidas.");setLoading(false);});SFX.error();return;}
           if(isBanned(u.id)){safe(()=>{setErr("Conta suspensa.");setLoading(false);});return;}
-          safe(()=>setLoading(false));
-          onLogin({id:u.id,name:u.name,email:u.email});
+          safe(()=>setLoading(false));onLogin({id:u.id,name:u.name,email:u.email});
         }
         return;
       }
 
-      // ── Supabase mode ──────────────────────────────────────────────────────
       if(mode==="cadastro"){
         if(!name.trim()||!email.trim()||!pass.trim()){safe(()=>{setErr("Preencha todos os campos.");setLoading(false);});SFX.error();return;}
         if(pass.length<6){safe(()=>{setErr("Senha precisa ter ao menos 6 caracteres.");setLoading(false);});return;}
-        const{data,error}=await sb.auth.signUp({
-          email:email.trim(),password:pass,
-          options:{data:{name:name.trim()}}
-        });
-        if(error){safe(()=>{setErr(error.message);setLoading(false);});SFX.error();return;}
-        // Create profile
-        try{ await sb.from("profiles").upsert({id:data.user.id,name:name.trim(),email:email.trim(),bio:""}); }catch(_){}
-        safe(()=>setLoading(false));
-        // Se o Supabase exigir confirmação de e-mail, o session virá null
-        if(!data.session){
-          SFX.save();
-          safe(()=>setAwaitingConfirm(true));
-          return;
-        }
-        SFX.login();
-        onLogin({id:data.user.id,name:name.trim(),email:email.trim(),isAdm:false});
-
-      }else{
-        if(!email.trim()||!pass.trim()){safe(()=>{setErr("Preencha e-mail e senha.");setLoading(false);});SFX.error();return;}
-
-        // Sign in
-        const{data,error}=await sb.auth.signInWithPassword({email:email.trim(),password:pass});
-        if(error){safe(()=>{setErr(error.message);setLoading(false);});SFX.error();return;}
-
-        const sbUser=data.user;
-
-        // Get profile
-        let prof=null;
-        try{ const r=await sb.from("profiles").select("*").eq("id",sbUser.id).maybeSingle(); prof=r.data; }catch(_){}
-
-        // Check ban
-        let ban=null;
-        try{ const r=await sb.from("bans").select("*").eq("user_id",sbUser.id).maybeSingle(); ban=r.data; }catch(_){}
-        if(ban&&!(ban.expires_at&&new Date(ban.expires_at)<new Date())){
-          await sb.auth.signOut();
-          safe(()=>{setErr("Conta suspensa: "+(ban.reason||""));setLoading(false);});
-          return;
-        }
-
-        // Check admin
-        let isAdm=sbUser.email===FOUNDER;
-        if(!isAdm){
-          try{ const r=await sb.from("admins").select("email").eq("email",sbUser.email).maybeSingle(); isAdm=r.data!==null; }catch(_){}
-        }
-
-        // Auto-create profile if missing
-        if(!prof){
-          const autoName=sbUser.user_metadata?.name||sbUser.email.split("@")[0];
-          try{ await sb.from("profiles").upsert({id:sbUser.id,name:autoName,email:sbUser.email,bio:""}); }catch(_){}
-          prof={name:autoName};
-        }
-
-        // Cache locally
-        try{
-          _LS.set(K.profile(sbUser.id),{
-            avatar:prof.avatar_url||null, bio:prof.bio||"",
-            banner:prof.banner||null, bannerImg:prof.banner_img||null,
-            gender:prof.gender||"Prefiro não dizer", age:prof.age||"", course:prof.course||""
-          });
-        }catch(_){}
-
-        // Stop loading BEFORE onLogin (which unmounts this component)
-        safe(()=>setLoading(false));
-        const userName=prof.name||sbUser.user_metadata?.name||sbUser.email;
-        SFX.login();
-        onLogin({id:sbUser.id,name:userName,email:sbUser.email,isAdm});
-
-        // Sync data in background
-        setTimeout(()=>{ _syncFromSupabase(sbUser.id).catch(()=>{}); },1000);
+        const{data:signUpData,error:signUpErr}=await sb.auth.signUp({email:email.trim(),password:pass,options:{data:{name:name.trim()}}});
+        if(signUpErr){safe(()=>{setErr(signUpErr.message);setLoading(false);});SFX.error();return;}
+        pendingRef.current={name:name.trim(),email:email.trim(),pass,userId:signUpData.user?.id||""};
+        try{await sendOTP(email.trim());}catch(e){console.warn("[OTP]",e.message);}
+        SFX.save();
+        safe(()=>{setLoading(false);setStep("verify");startTimer();});
+        return;
       }
 
+      if(!email.trim()||!pass.trim()){safe(()=>{setErr("Preencha e-mail e senha.");setLoading(false);});SFX.error();return;}
+      const{data,error}=await sb.auth.signInWithPassword({email:email.trim(),password:pass});
+      if(error){safe(()=>{setErr(error.message);setLoading(false);});SFX.error();return;}
+      const sbUser=data.user;
+      let prof=null;
+      try{const r=await sb.from("profiles").select("*").eq("id",sbUser.id).maybeSingle();prof=r.data;}catch(_){}
+      let ban=null;
+      try{const r=await sb.from("bans").select("*").eq("user_id",sbUser.id).maybeSingle();ban=r.data;}catch(_){}
+      if(ban&&!(ban.expires_at&&new Date(ban.expires_at)<new Date())){await sb.auth.signOut();safe(()=>{setErr("Conta suspensa: "+(ban.reason||""));setLoading(false);});return;}
+      let isAdm=sbUser.email===FOUNDER;
+      if(!isAdm){try{const r=await sb.from("admins").select("email").eq("email",sbUser.email).maybeSingle();isAdm=r.data!==null;}catch(_){}}
+      if(!prof){const autoName=sbUser.user_metadata?.name||sbUser.email.split("@")[0];try{await sb.from("profiles").upsert({id:sbUser.id,name:autoName,email:sbUser.email,bio:""});}catch(_){}prof={name:autoName};}
+      try{_LS.set(K.profile(sbUser.id),{avatar:prof.avatar_url||null,bio:prof.bio||"",banner:prof.banner||null,bannerImg:prof.banner_img||null,gender:prof.gender||"Prefiro não dizer",age:prof.age||"",course:prof.course||""});}catch(_){}
+      safe(()=>setLoading(false));SFX.login();
+      onLogin({id:sbUser.id,name:prof.name||sbUser.user_metadata?.name||sbUser.email,email:sbUser.email,isAdm});
+      setTimeout(()=>{_syncFromSupabase(sbUser.id).catch(()=>{});},1000);
     }catch(e){
-      console.error("[Auth]",e);
-      safe(()=>{ setErr(e.message||"Erro ao autenticar."); setLoading(false); });
-      SFX.error();
+      console.error("[Auth]",e);safe(()=>{setErr(e.message||"Erro ao autenticar.");setLoading(false);});SFX.error();
     }
   };
 
-  return(<div className="pc"><G cls="si" style={{maxWidth:380,width:"100%",padding:34}}>
-    {awaitingConfirm?(<>
-      <div style={{textAlign:"center",marginBottom:20}}>
-        <div style={{fontSize:44,marginBottom:12}}>📧</div>
-        <h2 style={{fontSize:20,fontWeight:700,marginBottom:8}}>Confirme seu e-mail</h2>
+  const verifyCode=async()=>{
+    if(code.trim().length!==6){setCodeErr("Digite o código de 6 dígitos.");return;}
+    if(expired){setCodeErr("Código expirado. Solicite um novo.");return;}
+    setCodeLoading(true);setCodeErr("");
+    try{
+      const{data,error}=await sb.auth.verifyOtp({email:pendingRef.current.email,token:code.trim(),type:"email"});
+      if(error){setCodeErr("Código incorreto. Verifique e tente novamente.");setCodeLoading(false);SFX.error();return;}
+      const sbUser=data.user||data.session?.user;
+      if(sbUser){try{await sb.from("profiles").upsert({id:sbUser.id,name:pendingRef.current.name||sbUser.email.split("@")[0],email:sbUser.email,bio:""});}catch(_){}}
+      clearInterval(timerRef.current);
+      const{data:loginData}=await sb.auth.signInWithPassword({email:pendingRef.current.email,password:pendingRef.current.pass});
+      SFX.login();
+      const finalUser=loginData?.user||sbUser;
+      onLogin({id:finalUser.id,name:pendingRef.current.name||finalUser.email,email:finalUser.email,isAdm:false});
+    }catch(e){setCodeErr("Erro ao verificar. Tente novamente.");setCodeLoading(false);SFX.error();}
+  };
+
+  const resendCode=async()=>{
+    setCodeErr("");setCode("");
+    try{await sendOTP(pendingRef.current.email);startTimer();}
+    catch(e){setCodeErr("Erro ao reenviar. Tente novamente.");}
+  };
+
+  if(step==="verify")return(
+    <div className="pc"><G cls="si" style={{maxWidth:380,width:"100%",padding:34}}>
+      <div style={{textAlign:"center",marginBottom:24}}>
+        <div style={{fontSize:44,marginBottom:12}}>📨</div>
+        <h2 style={{fontSize:20,fontWeight:700,marginBottom:8}}>Verifique seu e-mail</h2>
         <p style={{fontSize:13,color:"var(--t2)",lineHeight:1.7}}>
-          Enviamos um link de confirmação para<br/>
-          <strong style={{color:"var(--t)"}}>{email}</strong>
-        </p>
-        <p style={{fontSize:12,color:"var(--t3)",marginTop:10,lineHeight:1.6}}>
-          Clique no link do e-mail e depois volte aqui para entrar.
+          Enviamos um código de 6 dígitos para<br/>
+          <strong style={{color:"var(--t)"}}>{pendingRef.current.email}</strong>
         </p>
       </div>
-      <button className="btn btn-g" style={{width:"100%"}} onClick={()=>{setAwaitingConfirm(false);setMode("login");}}>
-        Ir para o login
+      <div style={{textAlign:"center",marginBottom:20}}>
+        {expired
+          ?<div style={{fontSize:13,color:"#fda4af",fontWeight:500}}>⏰ Código expirado</div>
+          :<div style={{display:"inline-flex",alignItems:"center",gap:8,padding:"6px 16px",borderRadius:20,background:"rgba(125,211,252,0.10)",border:"1px solid rgba(125,211,252,0.2)"}}>
+            <span style={{fontSize:12,color:"var(--t2)"}}>Expira em</span>
+            <span style={{fontSize:15,fontWeight:700,color:"#7dd3fc",fontVariantNumeric:"tabular-nums"}}>{fmtTimer(timer)}</span>
+          </div>}
+      </div>
+      {codeErr&&<div className="er">{codeErr}</div>}
+      <div className="fg">
+        <label>Código de verificação</label>
+        <input className="inp" maxLength={6} placeholder="000000"
+          value={code} onChange={e=>setCode(e.target.value.replace(/\D/g,""))}
+          onKeyDown={e=>e.key==="Enter"&&!codeLoading&&!expired&&verifyCode()}
+          style={{textAlign:"center",fontSize:24,fontWeight:700,letterSpacing:8,fontVariantNumeric:"tabular-nums"}}
+          autoFocus/>
+      </div>
+      <button className="btn btn-f" style={{width:"100%",fontSize:14,marginBottom:10}}
+        onClick={verifyCode} disabled={codeLoading||expired||code.length!==6}>
+        {codeLoading?"Verificando...":"Confirmar código ✓"}
       </button>
-    </>):(<>
+      {expired
+        ?<button className="btn btn-g" style={{width:"100%"}} onClick={resendCode}>🔄 Enviar novo código</button>
+        :<p style={{textAlign:"center",fontSize:12,color:"var(--t3)"}}>Não recebeu?{" "}
+          <span style={{color:"var(--t2)",cursor:"pointer",fontWeight:500}} onClick={resendCode}>Reenviar código</span></p>}
+      <button className="btn btn-g" style={{width:"100%",marginTop:10,fontSize:12}}
+        onClick={()=>{setStep("form");clearInterval(timerRef.current);setCode("");setCodeErr("");}}>← Voltar</button>
+    </G></div>
+  );
+
+  return(<div className="pc"><G cls="si" style={{maxWidth:380,width:"100%",padding:34}}>
     <div style={{textAlign:"center",marginBottom:28}}>
       <div style={{fontSize:40,marginBottom:10,filter:"drop-shadow(0 4px 14px rgba(255,255,255,0.12))"}}>◈</div>
       <div style={{fontSize:24,fontWeight:700,letterSpacing:-.5}}>Study Vieira</div>
@@ -1260,10 +1274,8 @@ function AuthPage({onLogin}){
         {mode==="login"?"Cadastre-se":"Entrar"}
       </span>
     </p>
-    </>)}
   </G></div>);
 }
-
 
 // ── NavBar ────────────────────────────────────────────────────────────────────
 function NavBar({user,tab,setTab,onLogout,dark,toggleTheme}){
