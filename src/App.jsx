@@ -52,7 +52,7 @@ const _LS = {
 // Map localStorage keys to Supabase tables for auto-sync
 const _SB_MAP = {
   // key prefix → { table, transform }
-  "sv5_posts":       { table:"posts",      toSB:(v)=>v.map(p=>({id:p.id,title:p.title||null,body:p.body||null,img:p.img||null,tag:p.tag,pinned:!!p.pinned,author_name:p.authorName,author_email:p.authorEmail})) },
+  "sv5_posts":       { table:"posts",      toSB:(v)=>v.map(p=>({id:p.id,title:p.title||null,body:p.body||null,img:p.img||null,video_url:p.videoUrl||null,tag:p.tag,pinned:!!p.pinned,author_name:p.authorName,author_email:p.authorEmail})) },
   "sv5_communities": { table:"communities",toSB:(v)=>v.map(c=>({id:c.id,name:c.name,type:c.type,description:c.desc||null,icon:c.icon||"🏫",created_by:c.createdBy})) },
   "sv5_memberships": { table:"memberships",toSB:(v)=>v.map(m=>({user_id:m.userId,community_id:m.communityId})) },
   "sv5_follows":     { table:"follows",    toSB:(v)=>v.map(f=>({follower_id:f.followerId,following_id:f.followingId})) },
@@ -222,7 +222,7 @@ const _syncFromSupabase = async (userId) => {
     if(membs) _LS.set(K.memberships, membs.map(m=>({userId:m.user_id,communityId:m.community_id,joinedAt:Date.now()})));
     // Posts
     const {data:posts} = await sb.from("posts").select("*").order("created_at",{ascending:false});
-    if(posts) _LS.set(K.posts, posts.map(p=>({id:p.id,title:p.title,body:p.body,img:p.img,tag:p.tag,pinned:p.pinned,authorName:p.author_name,authorEmail:p.author_email,createdAt:new Date(p.created_at).getTime()})));
+    if(posts) _LS.set(K.posts, posts.map(p=>({id:p.id,title:p.title,body:p.body,img:p.img,videoUrl:p.video_url||null,tag:p.tag,pinned:p.pinned,authorName:p.author_name,authorEmail:p.author_email,createdAt:new Date(p.created_at).getTime()})));
     // Bans
     const {data:bans} = await sb.from("bans").select("*");
     if(bans) _LS.set(K.bans, bans.map(b=>({userId:b.user_id,reason:b.reason,bannedBy:b.banned_by,bannedAt:Date.now(),expiresAt:b.expires_at?new Date(b.expires_at).getTime():null,type:b.type})));
@@ -291,6 +291,27 @@ const uid = () => {
   });
 };
 const now         = () => Date.now();
+
+// ── Compressão de imagem (canvas) ─────────────────────────────
+// Reduz dimensão máx para maxPx e recomprime como JPEG com `quality`.
+// Retorna uma Promise<string> com o base64 resultante.
+const compressImage = (file, maxPx = 1200, quality = 0.82) => new Promise((resolve) => {
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    const img = new Image();
+    img.onload = () => {
+      const scale = Math.min(1, maxPx / Math.max(img.width, img.height));
+      const w = Math.round(img.width * scale);
+      const h = Math.round(img.height * scale);
+      const canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+      resolve(canvas.toDataURL('image/jpeg', quality));
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+});
 const today       = () => new Date().toISOString().slice(0,10);
 const fmt         = (d) => new Date(d+"T12:00:00").toLocaleDateString("pt-BR",{day:"2-digit",month:"short"});
 const fmtL        = (d) => new Date(d+"T12:00:00").toLocaleDateString("pt-BR",{weekday:"long",day:"2-digit",month:"long"});
@@ -450,10 +471,18 @@ body{font-family:'Figtree',-apple-system,sans-serif;background:var(--bg);min-hei
 .nlogo{font-size:15px;font-weight:700;letter-spacing:-.3px;cursor:pointer;padding:6px 10px;border-radius:9px;transition:background .18s;margin-right:8px;user-select:none;}
 .nlogo:hover{background:rgba(255,255,255,0.07);}
 .nlogo em{font-style:normal;color:var(--t2);font-weight:400;font-size:12px;margin-left:3px;}
-.nt{padding:7px 13px;border-radius:10px;font-size:13px;font-weight:500;color:var(--t2);cursor:pointer;transition:all .18s;border:1px solid transparent;background:none;font-family:inherit;}
-.nt:hover{color:var(--t);background:rgba(255,255,255,0.06);}
-.nt.on{color:var(--t);background:var(--s2,rgba(255,255,255,0.10));border-color:var(--b);box-shadow:0 1px 0 var(--shine) inset;}
-.nr{display:flex;align-items:center;gap:8px;margin-left:auto;}
+.nt,.nav-tab{padding:7px 13px;border-radius:10px;font-size:13px;font-weight:500;color:var(--t2);cursor:pointer;transition:all .18s;border:1px solid transparent;background:none;font-family:inherit;}
+.nt:hover,.nav-tab:hover{color:var(--t);background:rgba(255,255,255,0.06);}
+.nt.on,.nav-tab.active{color:var(--t);background:var(--s2,rgba(255,255,255,0.10));border-color:var(--b);box-shadow:0 1px 0 var(--shine) inset;}
+.nr,.nav-right{display:flex;align-items:center;gap:8px;margin-left:auto;}
+.btn-admin{background:rgba(252,211,77,0.12);color:#fcd34d;border-color:rgba(252,211,77,0.22);}
+.btn-admin:hover{background:rgba(252,211,77,0.2);}
+.btn-ghost{background:rgba(255,255,255,0.05);color:var(--t2);border-color:var(--b2);}
+.btn-ghost:hover{background:rgba(255,255,255,0.09);color:var(--t);}
+.btn-fill{background:rgba(255,255,255,0.13);color:var(--t);border-color:rgba(255,255,255,0.17);box-shadow:0 1px 0 rgba(255,255,255,0.2) inset,0 3px 10px rgba(0,0,0,0.18);}
+.btn-fill:hover{background:rgba(255,255,255,0.19);}
+.btn-danger{background:rgba(255,70,70,0.11);color:#ff9494;border-color:rgba(255,70,70,0.2);}
+.btn-danger:hover{background:rgba(255,70,70,0.18);}
 .adm-badge{padding:3px 8px;border-radius:6px;font-size:10px;font-weight:600;letter-spacing:.4px;text-transform:uppercase;background:rgba(252,211,77,0.15);border:1px solid rgba(252,211,77,0.28);color:#fcd34d;}
 .ban-badge{padding:3px 8px;border-radius:6px;font-size:10px;font-weight:600;letter-spacing:.3px;text-transform:uppercase;background:rgba(255,70,70,0.15);border:1px solid rgba(255,70,70,0.28);color:#ff9494;}
 .av{border-radius:50%;object-fit:cover;border:1px solid rgba(255,255,255,0.2);flex-shrink:0;}
@@ -630,169 +659,57 @@ body{font-family:'Figtree',-apple-system,sans-serif;background:var(--bg);min-hei
 /* ── Heatmap ── */
 .heat-cell{width:12px;height:12px;border-radius:2px;transition:background .2s;}
 @keyframes fu{from{opacity:0;transform:translateY(10px);}to{opacity:1;transform:none;}}
-/* ── Hamburger menu ── */
-.hamburger{display:none;flex-direction:column;gap:5px;cursor:pointer;padding:8px;border-radius:8px;background:none;border:none;transition:background .18s;}
-.hamburger:hover{background:var(--card-bg);}
-.hamburger span{display:block;width:20px;height:2px;background:var(--t);border-radius:2px;transition:all .25s cubic-bezier(.22,1,.36,1);}
-.hamburger.open span:nth-child(1){transform:translateY(7px) rotate(45deg);}
-.hamburger.open span:nth-child(2){opacity:0;transform:scaleX(0);}
-.hamburger.open span:nth-child(3){transform:translateY(-7px) rotate(-45deg);}
-/* Slide-in menu */
-.mobile-menu{
-  position:fixed;top:0;right:-100%;width:75%;max-width:280px;height:100vh;
-  z-index:500;background:var(--nav-bg);backdrop-filter:blur(40px);
-  border-left:1px solid var(--b2);
-  display:flex;flex-direction:column;
-  padding:80px 20px 40px;gap:6px;
-  transition:right .3s cubic-bezier(.22,1,.36,1);
-  overflow-y:auto;
-}
-.mobile-menu.open{right:0;}
-.mobile-menu-overlay{
-  position:fixed;inset:0;z-index:499;background:rgba(0,0,0,0.5);
-  opacity:0;pointer-events:none;transition:opacity .3s;
-}
-.mobile-menu-overlay.open{opacity:1;pointer-events:auto;}
-.mobile-menu-item{
-  display:flex;align-items:center;gap:12px;padding:13px 16px;
-  border-radius:12px;cursor:pointer;transition:all .18s;
-  font-size:15px;font-weight:500;color:var(--t2);
-  border:none;background:none;font-family:inherit;text-align:left;
-}
-.mobile-menu-item:hover,.mobile-menu-item.active{background:var(--card-bg);color:var(--t);}
-.mobile-menu-item.active{border:1px solid var(--b);}
-.mobile-menu-icon{font-size:20px;width:28px;text-align:center;}
+
+.card-bg{background:var(--card-bg);}
+.alert-error{padding:9px 13px;border-radius:9px;font-size:13px;margin-bottom:12px;background:rgba(255,70,70,0.11);border:1px solid rgba(255,70,70,0.2);color:#ff9494;}
+.alert-success{padding:9px 13px;border-radius:9px;font-size:13px;margin-bottom:12px;background:rgba(86,234,172,0.11);border:1px solid rgba(86,234,172,0.2);color:#5eead4;}
+.modal-overlay{position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,0.75);backdrop-filter:blur(16px);overflow-y:auto;overflow-x:hidden;display:block;}
+.modal-box{width:100%;max-width:500px;padding:24px;flex-shrink:0;box-sizing:border-box;}
+.home-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start;}
 
 /* ── Hamburger menu ── */
-.ham-menu{
-  display:none;position:fixed;top:0;right:0;bottom:0;z-index:1000;
-  width:min(280px,85vw);background:var(--nav-bg);
-  backdrop-filter:blur(40px);border-left:1px solid var(--nav-border);
-  flex-direction:column;padding:20px 0;overflow-y:auto;
-  animation:slideInRight .25s cubic-bezier(.22,1,.36,1);
-}
-@keyframes slideInRight{from{transform:translateX(100%);}to{transform:none;}}
-.ham-overlay{
-  display:none;position:fixed;inset:0;z-index:999;
-  background:rgba(0,0,0,0.5);backdrop-filter:blur(4px);
-}
-.ham-item{
-  display:flex;align-items:center;gap:12px;padding:14px 24px;
+.hamburger{display:none;flex-direction:column;gap:5px;cursor:pointer;padding:7px;
+  background:rgba(255,255,255,0.06);border:1px solid var(--b2);border-radius:9px;
+  align-items:center;justify-content:center;width:34px;height:34px;flex-shrink:0;}
+.hamburger span{display:block;width:16px;height:2px;background:var(--t);border-radius:2px;
+  transition:transform .22s ease,opacity .22s ease;}
+/* Ham drawer */
+.ham-overlay{display:none;position:fixed;inset:0;z-index:999;background:rgba(0,0,0,0.55);backdrop-filter:blur(4px);}
+.ham-menu{display:none;position:fixed;top:0;right:0;bottom:0;z-index:1000;
+  width:min(280px,85vw);background:var(--nav-bg);backdrop-filter:blur(40px);
+  border-left:1px solid var(--nav-border);flex-direction:column;padding:16px 0 40px;overflow-y:auto;
+  animation:slideInRight .25s cubic-bezier(.22,1,.36,1);}
+@keyframes slideInRight{from{transform:translateX(100%);}to{transform:translateX(0);}}
+.ham-item{display:flex;align-items:center;gap:12px;padding:13px 20px;
   font-size:15px;font-weight:500;color:var(--t2);cursor:pointer;
-  transition:all .18s;border:none;background:none;font-family:inherit;width:100%;text-align:left;
-  border-left:3px solid transparent;
-}
+  transition:all .18s;border:none;border-left:3px solid transparent;
+  background:none;font-family:inherit;width:100%;text-align:left;}
 .ham-item:active{background:var(--card-hover);}
 .ham-item.active{color:var(--t);background:var(--card-bg);border-left-color:var(--t);}
 .ham-icon{font-size:20px;width:28px;text-align:center;flex-shrink:0;}
 .ham-divider{height:1px;background:var(--b2);margin:8px 16px;}
-/* Hamburger button */
-.hamburger{
-  display:none;flex-direction:column;gap:4px;padding:7px;
-  background:rgba(255,255,255,0.06);border:1px solid var(--b2);
-  border-radius:9px;cursor:pointer;align-items:center;justify-content:center;
-  width:34px;height:34px;flex-shrink:0;
-}
-.hamburger span{
-  width:16px;height:2px;background:var(--t);border-radius:2px;
-  transition:transform .22s ease,opacity .22s ease;display:block;
-}
-/* ── Bottom nav for mobile ── */
+/* Bottom nav (mobile) */
 .bottom-nav{display:none;}
-/* Hamburger menu */
-.hamburger{display:none;flex-direction:column;gap:5px;cursor:pointer;padding:6px;border-radius:8px;border:none;background:none;}
-.hamburger:hover{background:var(--card-bg);}
-.hamburger span{display:block;width:20px;height:2px;background:var(--t);border-radius:2px;transition:all .25s;}
-.hamburger.open span:nth-child(1){transform:translateY(7px) rotate(45deg);}
-.hamburger.open span:nth-child(2){opacity:0;}
-.hamburger.open span:nth-child(3){transform:translateY(-7px) rotate(-45deg);}
-.drawer{position:fixed;inset:0;z-index:300;pointer-events:none;}
-.drawer-overlay{position:absolute;inset:0;background:rgba(0,0,0,0);transition:background .3s;pointer-events:none;}
-.drawer.open .drawer-overlay{background:rgba(0,0,0,0.55);pointer-events:auto;backdrop-filter:blur(4px);}
-.drawer-panel{position:absolute;top:0;right:-280px;width:260px;height:100%;background:var(--nav-bg);backdrop-filter:blur(40px);border-left:1px solid var(--b2);transition:right .3s cubic-bezier(.22,1,.36,1);display:flex;flex-direction:column;padding:0;}
-.drawer.open .drawer-panel{right:0;}
-.drawer-header{padding:16px 20px;border-bottom:1px solid var(--b2);display:flex;align-items:center;justify-content:space-between;}
-.drawer-nav-item{display:flex;align-items:center;gap:12px;padding:14px 20px;cursor:pointer;transition:background .18s;border:none;background:none;font-family:inherit;width:100%;text-align:left;font-size:15px;font-weight:500;color:var(--t);}
-.drawer-nav-item:hover{background:var(--card-bg);}
-.drawer-nav-item.active{background:var(--s2,rgba(255,255,255,0.1));color:var(--t);}
-.drawer-nav-item .nav-icon{font-size:20px;width:28px;text-align:center;}
+.bottom-nav-item{flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;
+  padding:6px 2px;cursor:pointer;border:none;background:none;font-family:inherit;}
+.bottom-nav-icon{font-size:20px;line-height:1;}
+.bottom-nav-label{font-size:9px;font-weight:500;color:var(--t3);transition:color .18s;}
+.bottom-nav-item.active .bottom-nav-label{color:var(--t);}
 .fu{animation:fu .3s cubic-bezier(.22,1,.36,1) both;}
 @keyframes si{from{opacity:0;transform:scale(.97);}to{opacity:1;transform:scale(1);}}
 .si{animation:si .25s cubic-bezier(.22,1,.36,1) both;}
 ::-webkit-scrollbar{width:5px;}
 ::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.09);border-radius:3px;}
-/* ── TABLET (≤768px) ── */
-@media(max-width:768px){
-  .hgrid{grid-template-columns:1fr;}
-  .hright{position:static!important;}
-  .fr{grid-template-columns:1fr 1fr;}
-  .wrap{padding:16px 12px;}
-  .g2{grid-template-columns:repeat(auto-fill,minmax(160px,1fr));}
-  .g3{grid-template-columns:repeat(auto-fill,minmax(200px,1fr));}
-}
-
-/* ── MOBILE (≤480px) ── */
-@media(max-width:480px){
-  /* Nav — hide tabs, show hamburger */
-  .nav>div:first-of-type{display:none!important;}
-  .hamburger{display:flex!important;}
-  .nav{padding:8px 12px;gap:6px;}
-  .nlogo{font-size:14px;padding:5px 8px;margin-right:0;}
-  .nav-tab{display:none!important;}
-  .nav-right{gap:6px;margin-left:auto;}
-  .btn-ico{width:30px;height:30px;font-size:14px;}
-
-  /* Layout */
-  .wrap{padding:12px 10px 80px!important;}
-  .hgrid{grid-template-columns:1fr!important;gap:12px;}
-  .hleft{gap:12px;}
-  .hright{position:static!important;}
-  .fr{grid-template-columns:1fr!important;}
-  .g2{grid-template-columns:1fr 1fr;gap:8px;}
-  .g3{grid-template-columns:1fr;gap:10px;}
-
-  /* Sub-tabs */
-  .stabs{flex-wrap:wrap;gap:3px;width:100%;}
-  .stab{padding:6px 10px;font-size:11px;flex:1;text-align:center;}
-
-  /* Cards */
-  .glass{border-radius:14px;}
-  .mp{padding:16px;}
-  .mo-inner{padding:14px 10px 50px;}
-
-  /* Home — feed below calendar, reasonable height */
-  .feed-wrap{height:320px;min-height:280px;}
-  .feed-title{font-size:15px;}
-  .feed-content{padding:12px 12px 14px;}
-
-  /* Profile */
-  .prof-banner{height:90px;}
-  .prof-stats{grid-template-columns:repeat(3,1fr);}
-  .prof-stat{padding:10px 4px;}
-  .prof-stat-n{font-size:16px;}
-  .prof-stat-l{font-size:9px;letter-spacing:0;}
-
-  /* Typography */
-  h1{font-size:18px!important;letter-spacing:-.3px!important;}
-  h2{font-size:15px!important;}
-  .sh h2{font-size:15px;}
-  .sh{margin-bottom:10px;}
-
-  /* Buttons */
-  .btn{padding:8px 14px;font-size:12px;}
-  .btn-sm{padding:5px 9px;font-size:11px;}
-  .btn-f{padding:10px 18px;}
-
-  /* Modal */
-  .post-detail-img{max-height:200px;}
-}
-
-/* ── VERY SMALL (≤360px) ── */
-@media(max-width:360px){
-  .nav-tab{display:none;}
-  .nav-tab.active{display:flex;background:var(--s2);border:1px solid var(--b);}
-  .nlogo{font-size:12px;}
-  .wrap{padding:10px 8px;}
+/* ── Mobile block — CSS only ── */
+.mobile-msg{display:none;}
+@media(max-width:550px){
+  .app,.nav,.wrap{display:none!important;}
+  .mobile-msg{
+    display:flex;position:fixed;inset:0;z-index:9999;
+    flex-direction:column;align-items:center;justify-content:center;
+    background:#1c1c1e;padding:40px 32px;text-align:center;
+    font-family:'Figtree',-apple-system,sans-serif;
+  }
 }
 `;
 
@@ -911,7 +828,7 @@ const sbSyncUserData = async (userId) => {
 
     // Global posts
     const { data: posts } = await sb.from("posts").select("*").order("created_at", { ascending: false });
-    if (posts) DB.set(K.posts, posts.map(p => ({ id:p.id, title:p.title, body:p.body, img:p.img, tag:p.tag, pinned:p.pinned, authorName:p.author_name, authorEmail:p.author_email, createdAt:new Date(p.created_at).getTime() })));
+    if (posts) DB.set(K.posts, posts.map(p => ({ id:p.id, title:p.title, body:p.body, img:p.img, videoUrl:p.video_url||null, tag:p.tag, pinned:p.pinned, authorName:p.author_name, authorEmail:p.author_email, createdAt:new Date(p.created_at).getTime() })));
 
     // Bans
     const { data: bans } = await sb.from("bans").select("*");
@@ -949,6 +866,15 @@ const sbDelete = async (table, match) => {
   try { await sb.from(table).delete().match(match); } catch (e) { console.warn(e.message); }
 };
 
+
+// ── Log de ações administrativas ──────────────────────────────
+const logAdmin = async (adminEmail, adminName, action, target = '', detail = '') => {
+  if (!USE_SUPABASE || !sb) return;
+  try {
+    await sb.from('admin_logs').insert({ admin_email: adminEmail, admin_name: adminName, action, target, detail });
+  } catch (e) { console.warn('[log]', e.message); }
+};
+
 // ══════════════════════════════════════════════════════════════════════════════
 //  APP ROOT
 // ══════════════════════════════════════════════════════════════════════════════
@@ -958,6 +884,8 @@ export default function App(){
   const [viewUser,setViewUser]=useState(null);
   const [dark,setDark]=useState(()=>DB.get("sv5_theme")!=="light");
   const [authLoading,setAuthLoading]=useState(USE_SUPABASE);
+  // Estado do ban vindo do Supabase — não pode ser forjado limpando localStorage
+  const [activeBan,setActiveBan]=useState(null);
 
   useEffect(()=>{
     document.documentElement.style.cssText=dark?CSS_DARK:CSS_LIGHT;
@@ -965,6 +893,21 @@ export default function App(){
   },[dark]);
 
   const toggleTheme=()=>{SFX.toggle(!dark);setDark(d=>!d);};
+
+  // Verifica ban diretamente no Supabase — retorna o objeto ban ou null
+  const _checkBanSB=async(userId)=>{
+    if(!USE_SUPABASE||!sb) return null;
+    try{
+      const{data}=await sb.from("bans").select("*").eq("user_id",userId).maybeSingle();
+      if(!data) return null;
+      // Expirou? Remove do banco e retorna null
+      if(data.expires_at && new Date(data.expires_at)<new Date()){
+        await sb.from("bans").delete().eq("user_id",userId).catch(()=>{});
+        return null;
+      }
+      return data;
+    }catch(e){ console.warn("[ban check]",e.message); return null; }
+  };
 
   // ── Supabase auth ─────────────────────────────────────────────────────────
   useEffect(()=>{
@@ -980,7 +923,7 @@ export default function App(){
     };
     init();
     const{data:{subscription}}=sb.auth.onAuthStateChange(async(event,session)=>{
-      if(event==="SIGNED_OUT"){setUser(null);}
+      if(event==="SIGNED_OUT"){setUser(null);setActiveBan(null);}
       else if(session?.user){
         await _loginFromSession(session.user);
         _syncFromSupabase(session.user.id).catch(()=>{});
@@ -989,7 +932,32 @@ export default function App(){
     return()=>subscription.unsubscribe();
   },[]);
 
+  // Revalidação periódica do ban no Supabase a cada 5 minutos
+  // Garante que um ban aplicado enquanto o usuário está logado seja detectado
+  useEffect(()=>{
+    if(!USE_SUPABASE||!user) return;
+    const check=async()=>{
+      const ban=await _checkBanSB(user.id);
+      setActiveBan(ban);
+      if(ban){ await sb.auth.signOut(); }
+    };
+    // Primeira checagem imediata
+    check();
+    const interval=setInterval(check, 5*60*1000); // a cada 5 min
+    return()=>clearInterval(interval);
+  },[user?.id]);
+
   const _loginFromSession=async(sbUser)=>{
+    // VERIFICAÇÃO DE BAN NO SERVIDOR — não pode ser contornada limpando localStorage
+    const ban=await _checkBanSB(sbUser.id);
+    if(ban){
+      setActiveBan(ban);
+      await sb.auth.signOut();
+      setAuthLoading(false);
+      return null;
+    }
+    setActiveBan(null);
+
     const{data:prof}=await sb.from("profiles").select("*").eq("id",sbUser.id).maybeSingle();
     const{data:adm}=await sb.from("admins").select("email").eq("email",sbUser.email).single();
     const isAdm=sbUser.email===FOUNDER||!!adm;
@@ -1033,7 +1001,7 @@ export default function App(){
   const logout=async()=>{
     if(USE_SUPABASE)await sb.auth.signOut();
     else DB.set(K.session,null);
-    _currentUserId=null;setUser(null);SFX.close();
+    _currentUserId=null;setUser(null);setActiveBan(null);SFX.close();
   };
   const refreshUser=()=>{
     if(USE_SUPABASE)return;
@@ -1042,11 +1010,22 @@ export default function App(){
     if(fresh){const u={id:fresh.id,name:fresh.name,email:fresh.email};DB.set(K.session,u);setUser(u);}
   };
 
-    // Check ban on every render
-  if(user && isBanned(user.id)){
-    const ban=getBan(user.id);
+    // Check ban — usa estado React populado diretamente do Supabase, não do localStorage
+  // Também mostra se o usuário não está logado mas tem ban pendente (sessão expirada de banido)
+  if(activeBan){
+    const expiresAt=activeBan.expires_at?new Date(activeBan.expires_at).getTime():null;
     return(<>
       <style>{CSS}</style><div className="mesh"/>
+      <div className="mobile-msg">
+        <div style={{fontSize:64,marginBottom:20}}>📱</div>
+        <div style={{fontSize:24,fontWeight:700,color:"white",letterSpacing:-.5,marginBottom:10}}>Em breve nas lojas!</div>
+        <div style={{fontSize:14,color:"rgba(255,255,255,0.5)",lineHeight:1.8,marginBottom:28,maxWidth:260}}>
+          O app do <strong style={{color:"white"}}>Study Vieira</strong> está chegando para iOS e Android.
+        </div>
+        <div style={{padding:"10px 20px",borderRadius:12,background:"rgba(255,255,255,0.07)",border:"1px solid rgba(255,255,255,0.12)",color:"rgba(255,255,255,0.5)",fontSize:13}}>
+          🖥️ Use pelo computador por enquanto
+        </div>
+      </div>
       <div className="pc">
         <G cls="si" style={{maxWidth:420,width:"100%",padding:36,textAlign:"center"}}>
           <div style={{fontSize:48,marginBottom:16}}>🔨</div>
@@ -1054,9 +1033,10 @@ export default function App(){
           <p style={{color:"var(--t2)",fontSize:14,lineHeight:1.6,marginBottom:16}}>
             Sua conta foi suspensa por violar os termos da plataforma.
           </p>
-          {ban.reason&&<div className="warn" style={{textAlign:"left"}}><strong>Motivo:</strong> {ban.reason}</div>}
-          {ban.expiresAt
-            ?<p style={{fontSize:13,color:"var(--t2)"}}>Suspensão expira em: <strong>{fmtDT(ban.expiresAt)}</strong></p>
+          {activeBan.reason&&<div className="warn" style={{textAlign:"left"}}><strong>Motivo:</strong> {activeBan.reason}</div>}
+          {activeBan.type&&<div style={{fontSize:13,color:"var(--t2)",marginBottom:10}}>Tipo: <strong>{activeBan.type}</strong></div>}
+          {expiresAt
+            ?<p style={{fontSize:13,color:"var(--t2)"}}>Suspensão expira em: <strong>{fmtDT(expiresAt)}</strong></p>
             :<p style={{fontSize:13,color:"#ff9494"}}>Conta desativada indefinidamente. Entre em contato com um administrador.</p>
           }
           <button className="btn btn-g" style={{marginTop:20,width:"100%"}} onClick={logout}>Sair</button>
@@ -1109,6 +1089,8 @@ function AuthPage({onLogin}){
   const [pass,setPass]=useState("");
   const [err,setErr]=useState("");
   const [loading,setLoading]=useState(false);
+  // Confirmação de e-mail: após cadastro no Supabase, aguarda verificação
+  const [awaitingConfirm,setAwaitingConfirm]=useState(false);
   const mounted=useRef(true);
   useEffect(()=>{mounted.current=true;return()=>{mounted.current=false;};},[]);
 
@@ -1154,6 +1136,12 @@ function AuthPage({onLogin}){
         // Create profile
         try{ await sb.from("profiles").upsert({id:data.user.id,name:name.trim(),email:email.trim(),bio:""}); }catch(_){}
         safe(()=>setLoading(false));
+        // Se o Supabase exigir confirmação de e-mail, o session virá null
+        if(!data.session){
+          SFX.save();
+          safe(()=>setAwaitingConfirm(true));
+          return;
+        }
         SFX.login();
         onLogin({id:data.user.id,name:name.trim(),email:email.trim(),isAdm:false});
 
@@ -1219,6 +1207,22 @@ function AuthPage({onLogin}){
   };
 
   return(<div className="pc"><G cls="si" style={{maxWidth:380,width:"100%",padding:34}}>
+    {awaitingConfirm?(<>
+      <div style={{textAlign:"center",marginBottom:20}}>
+        <div style={{fontSize:44,marginBottom:12}}>📧</div>
+        <h2 style={{fontSize:20,fontWeight:700,marginBottom:8}}>Confirme seu e-mail</h2>
+        <p style={{fontSize:13,color:"var(--t2)",lineHeight:1.7}}>
+          Enviamos um link de confirmação para<br/>
+          <strong style={{color:"var(--t)"}}>{email}</strong>
+        </p>
+        <p style={{fontSize:12,color:"var(--t3)",marginTop:10,lineHeight:1.6}}>
+          Clique no link do e-mail e depois volte aqui para entrar.
+        </p>
+      </div>
+      <button className="btn btn-g" style={{width:"100%"}} onClick={()=>{setAwaitingConfirm(false);setMode("login");}}>
+        Ir para o login
+      </button>
+    </>):(<>
     <div style={{textAlign:"center",marginBottom:28}}>
       <div style={{fontSize:40,marginBottom:10,filter:"drop-shadow(0 4px 14px rgba(255,255,255,0.12))"}}>◈</div>
       <div style={{fontSize:24,fontWeight:700,letterSpacing:-.5}}>Study Vieira</div>
@@ -1243,6 +1247,7 @@ function AuthPage({onLogin}){
         {mode==="login"?"Cadastre-se":"Entrar"}
       </span>
     </p>
+    </>)}
   </G></div>);
 }
 
@@ -1252,14 +1257,14 @@ function NavBar({user,tab,setTab,onLogout,dark,toggleTheme}){
   const admin=isAdmin(user);
   const prof=getProfile(user.id);
   const [menuOpen,setMenuOpen]=useState(false);
+  // Desktop tabs — no admin here, it gets its own button
   const navTabs=[
-    {k:"home",      l:"Início",     icon:"🏠"},
-    {k:"materias",  l:"Matérias",   icon:"📚"},
-    {k:"agenda",    l:"Agenda",     icon:"📅"},
-    {k:"comunidade",l:"Comunidade", icon:"👥"},
-    {k:"feedback",  l:"Feedback",   icon:"📬"},
-    {k:"apoio",     l:"Apoie-nos",  icon:"☕"},
-    ...(admin?[{k:"admin",l:"Admin",icon:"⭐"}]:[]),
+    {k:"home",      l:"Início",    icon:"🏠"},
+    {k:"materias",  l:"Matérias",  icon:"📚"},
+    {k:"agenda",    l:"Agenda",    icon:"📅"},
+    {k:"comunidade",l:"Comunidade",icon:"👥"},
+    {k:"feedback",  l:"Feedback",  icon:"📬"},
+    {k:"apoio",     l:"Apoie",  icon:"☕"},
   ];
   const go=(key)=>{SFX.tab();setTab(key);setMenuOpen(false);};
   return(<>
@@ -1272,16 +1277,25 @@ function NavBar({user,tab,setTab,onLogout,dark,toggleTheme}){
         ))}
       </div>
       <div className="nav-right">
+        {/* Theme toggle */}
         <button className="btn btn-ghost btn-ico" onClick={toggleTheme} style={{fontSize:15,border:"1px solid var(--b2)"}}>
           {dark?"☀️":"🌙"}
         </button>
+        {/* Admin button — yellow, only for admins, next to avatar */}
+        {admin&&(
+          <button className="btn btn-admin btn-sm" onClick={()=>go("admin")}
+            style={{padding:"5px 10px",fontSize:11,fontWeight:600,letterSpacing:.3}}>
+            ⭐ Admin
+          </button>
+        )}
+        {/* Avatar → perfil */}
         <div style={{cursor:"pointer",borderRadius:10,padding:"3px 6px",transition:"background .18s",display:"flex",alignItems:"center"}}
           onClick={()=>{SFX.click();setTab("perfil");setMenuOpen(false);}}
           onMouseEnter={e=>e.currentTarget.style.background="var(--card-bg)"}
           onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
           <Av src={prof.avatar} name={user.name} size={26}/>
         </div>
-        {/* Hamburger — shown only on mobile via CSS */}
+        {/* Hamburger — mobile only, shown via CSS */}
         <button className="hamburger" onClick={()=>setMenuOpen(m=>!m)}>
           <span style={{transform:menuOpen?"rotate(45deg) translate(3px,6px)":"none"}}/>
           <span style={{opacity:menuOpen?0:1}}/>
@@ -1308,6 +1322,13 @@ function NavBar({user,tab,setTab,onLogout,dark,toggleTheme}){
             <span className="ham-icon">{t.icon}</span><span>{t.l}</span>
           </button>
         ))}
+        {admin&&<>
+          <div className="ham-divider"/>
+          <button className={`ham-item ${tab==="admin"?"active":""}`} onClick={()=>go("admin")}
+            style={{color:"#fcd34d"}}>
+            <span className="ham-icon">⭐</span><span>Admin</span>
+          </button>
+        </>}
         <div className="ham-divider"/>
         <button className="ham-item" onClick={()=>{SFX.click();setTab("perfil");setMenuOpen(false);}}>
           <span className="ham-icon">👤</span><span>Perfil</span>
@@ -1337,6 +1358,7 @@ function AdminTab({user,refreshUser}){
     {k:"users",   l:"👥 Usuários & Punições"},
     {k:"admins",  l:"⭐ Administradores"},
     {k:"feedback",l:"📬 Feedbacks"},
+    {k:"logs",    l:"📋 Logs"},
   ];
   return(<div className="fu">
     <div style={{marginBottom:18}}>
@@ -1354,17 +1376,20 @@ function AdminTab({user,refreshUser}){
     {sub==="users"  &&<AdminUsers     user={user}/>}
     {sub==="admins"   &&<AdminAdmins    user={user}/>}
     {sub==="feedback" &&<AdminFeedback  user={user}/>}
+    {sub==="logs"     &&<AdminLogs      user={user}/>}
   </div>);
 }
 
 // ── Admin: Global Posts ───────────────────────────────────────────────────────
 function AdminPosts({user}){
+  const isFounder=user.email===FOUNDER;
   const [posts,setPosts]=useState(()=>DB.get(K.posts)||[]);
   const [modal,setModal]=useState(null);
-  // tudo opcional — só a imagem é o aviso se o admin quiser
-  const [img,setImg]=useState(null);        // base64
-  const [title,setTitle]=useState("");      // opcional
-  const [body,setBody]=useState("");        // opcional (legenda/texto)
+  const [img,setImg]=useState(null);
+  const [videoUrl,setVideoUrl]=useState("");
+  const [mediaType,setMediaType]=useState("image"); // "image" | "video"
+  const [title,setTitle]=useState("");
+  const [body,setBody]=useState("");
   const [tag,setTag]=useState("Aviso");
   const [pinned,setPinned]=useState(false);
   const [err,setErr]=useState("");
@@ -1372,26 +1397,45 @@ function AdminPosts({user}){
 
   const save=v=>{DB.set(K.posts,v);setPosts(v);};
 
-  const reset=()=>{setImg(null);setTitle("");setBody("");setTag("Aviso");setPinned(false);setErr("");};
-  const openNew=()=>{reset();SFX.open();setModal("new");};
-  const openEdit=p=>{setImg(p.img||null);setTitle(p.title||"");setBody(p.body||"");setTag(p.tag||"Aviso");setPinned(p.pinned||false);setErr("");setModal(p);};
+  // Extrai embed URL e thumbnail do YouTube ou Vimeo
+  const parseVideoUrl=(url)=>{
+    if(!url) return null;
+    const ytMatch=url.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/|shorts\/))([a-zA-Z0-9_-]{11})/);
+    if(ytMatch) return{type:"youtube",id:ytMatch[1],embed:`https://www.youtube.com/embed/${ytMatch[1]}?autoplay=0&rel=0`,thumb:`https://img.youtube.com/vi/${ytMatch[1]}/hqdefault.jpg`};
+    const vmMatch=url.match(/vimeo\.com\/(\d+)/);
+    if(vmMatch) return{type:"vimeo",id:vmMatch[1],embed:`https://player.vimeo.com/video/${vmMatch[1]}`,thumb:null};
+    return null;
+  };
+  const parsedVideo=parseVideoUrl(videoUrl);
 
-  const handleImg=(e)=>{
+  const reset=()=>{setImg(null);setVideoUrl("");setMediaType("image");setTitle("");setBody("");setTag("Aviso");setPinned(false);setErr("");};
+  const openNew=()=>{reset();SFX.open();setModal("new");};
+  const openEdit=p=>{
+    setImg(p.img||null);setVideoUrl(p.videoUrl||"");
+    setMediaType(p.videoUrl?"video":"image");
+    setTitle(p.title||"");setBody(p.body||"");setTag(p.tag||"Aviso");setPinned(p.pinned||false);setErr("");setModal(p);
+  };
+
+  const handleImg=async(e)=>{
     const file=e.target.files[0];if(!file)return;
-    const reader=new FileReader();
-    reader.onload=(ev)=>setImg(ev.target.result);
-    reader.readAsDataURL(file);
+    const compressed=await compressImage(file,1200,0.82);
+    setImg(compressed);
   };
 
   const submit=async()=>{
-    if(!img&&!title.trim()){setErr("Adicione uma imagem ou escreva um título.");return;}
-    const post={id:uid(),img,title:title.trim(),body:body.trim(),tag,pinned,authorName:user.name,authorEmail:user.email,createdAt:Date.now()};
+    const hasMedia=mediaType==="video"?!!parsedVideo:!!img;
+    if(!hasMedia&&!title.trim()){setErr("Adicione uma mídia ou escreva um título.");return;}
+    if(mediaType==="video"&&videoUrl&&!parsedVideo){setErr("URL inválida. Use YouTube ou Vimeo.");return;}
+    const post={id:uid(),img:mediaType==="image"?img:null,videoUrl:mediaType==="video"&&parsedVideo?videoUrl:null,
+      title:title.trim(),body:body.trim(),tag,pinned,authorName:user.name,authorEmail:user.email,createdAt:Date.now()};
     if(modal==="new"){
       save([...posts,post]);
-      if(USE_SUPABASE) await sb.from("posts").insert({title:post.title||null,body:post.body||null,img:post.img||null,tag:post.tag,pinned:post.pinned,author_name:post.authorName,author_email:post.authorEmail});
+      if(USE_SUPABASE) await sb.from("posts").insert({title:post.title||null,body:post.body||null,img:post.img||null,
+        video_url:post.videoUrl||null,tag:post.tag,pinned:post.pinned,author_name:post.authorName,author_email:post.authorEmail});
     }else{
-      save(posts.map(p=>p.id===modal.id?{...p,img,title:title.trim(),body:body.trim(),tag,pinned}:p));
-      if(USE_SUPABASE) await sb.from("posts").update({title:title.trim()||null,body:body.trim()||null,img:img||null,tag,pinned}).eq("id",modal.id);
+      save(posts.map(p=>p.id===modal.id?{...p,...post,id:modal.id}:p));
+      if(USE_SUPABASE) await sb.from("posts").update({title:post.title||null,body:post.body||null,
+        img:post.img||null,video_url:post.videoUrl||null,tag,pinned}).eq("id",modal.id);
     }
     SFX.save();SFX.close();setModal(null);
   };
@@ -1409,62 +1453,99 @@ function AdminPosts({user}){
     </div>
 
     {sorted.length===0
-      ?<G><div className="empty"><div style={{fontSize:32,marginBottom:8}}>🖼️</div><p>Nenhum aviso publicado</p><p style={{fontSize:12,color:"var(--t3)",marginTop:6}}>Publique uma foto — ela vira o aviso</p></div></G>
+      ?<G><div className="empty"><div style={{fontSize:32,marginBottom:8}}>🖼️</div><p>Nenhum aviso publicado</p></div></G>
       :<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(190px,1fr))",gap:10}}>
-        {sorted.map(p=>{const tc=PCOLORS[p.tag]||"#cbd5e1";const hasText=p.title||p.body;return(
-          <div key={p.id} onClick={()=>openEdit(p)}
-            style={{position:"relative",borderRadius:14,overflow:"hidden",aspectRatio:"4/5",cursor:"pointer",
-              background:"var(--s)",border:"1px solid var(--b)"}}>
-            {/* image or colour bg */}
-            {p.img
-              ?<img src={p.img} style={{width:"100%",height:"100%",objectFit:"cover",display:"block"}} alt="aviso"/>
-              :<div style={{width:"100%",height:"100%",background:`linear-gradient(135deg,${tc}30,var(--bg))`}}/>
-            }
-            {/* only overlay if there's text to show */}
-            {hasText&&<div style={{position:"absolute",inset:0,background:"linear-gradient(to top,rgba(0,0,0,0.72) 0%,transparent 55%)"}}/>}
-            {p.pinned&&<div style={{position:"absolute",top:10,right:10,fontSize:16,filter:"drop-shadow(0 1px 3px rgba(0,0,0,.5))"}}>📌</div>}
-            {hasText&&(
-              <div style={{position:"absolute",bottom:0,left:0,right:0,padding:"10px 12px 10px"}}>
-                <span style={{display:"inline-block",padding:"2px 7px",borderRadius:20,fontSize:9,fontWeight:600,
-                  background:`${tc}30`,color:tc,border:`1px solid ${tc}50`,marginBottom:4}}>{p.tag}</span>
-                {p.title&&<div style={{fontSize:13,fontWeight:700,color:"#fff",lineHeight:1.3}}>{p.title}</div>}
-              </div>
-            )}
-            <button className="btn btn-del" style={{position:"absolute",top:8,left:8,padding:"3px 7px",fontSize:10,borderRadius:7}}
-              onClick={e=>{e.stopPropagation();del(p.id);}}>✕</button>
-          </div>
-        );})}
+        {sorted.map(p=>{
+          const tc=PCOLORS[p.tag]||"#cbd5e1";const hasText=p.title||p.body;
+          const pv=parseVideoUrl(p.videoUrl||"");
+          return(
+            <div key={p.id} onClick={()=>openEdit(p)}
+              style={{position:"relative",borderRadius:14,overflow:"hidden",aspectRatio:"4/5",cursor:"pointer",
+                background:"var(--s)",border:"1px solid var(--b)"}}>
+              {pv?.thumb
+                ?<img src={pv.thumb} style={{width:"100%",height:"100%",objectFit:"cover",display:"block"}} alt="video"/>
+                :p.img
+                  ?<img src={p.img} style={{width:"100%",height:"100%",objectFit:"cover",display:"block"}} alt="aviso"/>
+                  :<div style={{width:"100%",height:"100%",background:`linear-gradient(135deg,${tc}30,var(--bg))`}}/>
+              }
+              {p.videoUrl&&<div style={{position:"absolute",top:"50%",left:"50%",transform:"translate(-50%,-50%)",
+                width:44,height:44,borderRadius:"50%",background:"rgba(0,0,0,0.65)",
+                display:"flex",alignItems:"center",justifyContent:"center",fontSize:20}}>▶</div>}
+              {hasText&&<div style={{position:"absolute",inset:0,background:"linear-gradient(to top,rgba(0,0,0,0.72) 0%,transparent 55%)"}}/>}
+              {p.pinned&&<div style={{position:"absolute",top:10,right:10,fontSize:16}}>📌</div>}
+              {hasText&&(
+                <div style={{position:"absolute",bottom:0,left:0,right:0,padding:"10px 12px"}}>
+                  <span style={{display:"inline-block",padding:"2px 7px",borderRadius:20,fontSize:9,fontWeight:600,
+                    background:`${tc}30`,color:tc,border:`1px solid ${tc}50`,marginBottom:4}}>{p.tag}</span>
+                  {p.title&&<div style={{fontSize:13,fontWeight:700,color:"#fff",lineHeight:1.3}}>{p.title}</div>}
+                </div>
+              )}
+              <button className="btn btn-del" style={{position:"absolute",top:8,left:8,padding:"3px 7px",fontSize:10,borderRadius:7}}
+                onClick={e=>{e.stopPropagation();del(p.id);}}>✕</button>
+            </div>
+          );
+        })}
       </div>
     }
 
-    {/* Modal de criação/edição */}
     {modal&&(<Modal onClose={()=>setModal(null)}><G cls="mp si" style={{maxWidth:480,padding:0}} onClick={e=>e.stopPropagation()}>
 
-      {/* ─── ZONA DA IMAGEM (protagonista) ─── */}
-      <input ref={fileRef} type="file" accept="image/*" style={{display:"none"}} onChange={handleImg}/>
-      <div onClick={()=>fileRef.current?.click()} style={{
-        width:"100%",minHeight:220,cursor:"pointer",position:"relative",
-        background:img?"none":"var(--s)",
-        display:"flex",alignItems:"center",justifyContent:"center",
-        borderBottom:"1px solid var(--b2)",overflow:"hidden"}}>
-        {img
-          ?<><img src={img} style={{width:"100%",objectFit:"cover",display:"block",maxHeight:320}} alt="preview"/>
-            <div style={{position:"absolute",inset:0,background:"rgba(0,0,0,0.28)",display:"flex",alignItems:"center",justifyContent:"center"}}>
-              <span style={{color:"rgba(255,255,255,0.85)",fontSize:13,fontWeight:600,background:"rgba(0,0,0,0.35)",padding:"6px 14px",borderRadius:20}}>✎ Trocar imagem</span>
-            </div></>
-          :<div style={{textAlign:"center",color:"var(--t3)",padding:"32px 20px"}}>
-            <div style={{fontSize:40,marginBottom:10}}>🖼️</div>
-            <div style={{fontSize:15,fontWeight:600,color:"var(--t2)",marginBottom:6}}>Toque para adicionar imagem</div>
-            <div style={{fontSize:12}}>A imagem É o aviso. Texto é opcional.</div>
-          </div>
-        }
-      </div>
+      {/* Seletor imagem / vídeo — só fundador */}
+      {isFounder&&(
+        <div style={{display:"flex",gap:0,borderBottom:"1px solid var(--b2)"}}>
+          {[{v:"image",l:"🖼️ Imagem"},{v:"video",l:"🎬 Vídeo"}].map(t=>(
+            <button key={t.v} onClick={()=>{setMediaType(t.v);setErr("");}}
+              style={{flex:1,padding:"12px 0",border:"none",cursor:"pointer",fontFamily:"inherit",fontSize:13,
+                fontWeight:mediaType===t.v?700:400,background:mediaType===t.v?"rgba(255,255,255,0.07)":"transparent",
+                color:mediaType===t.v?"var(--t)":"var(--t2)",
+                borderBottom:mediaType===t.v?"2px solid var(--t)":"2px solid transparent",transition:"all .18s"}}>
+              {t.l}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Zona de imagem */}
+      {mediaType==="image"&&(<>
+        <input ref={fileRef} type="file" accept="image/*" style={{display:"none"}} onChange={handleImg}/>
+        <div onClick={()=>fileRef.current?.click()} style={{width:"100%",minHeight:220,cursor:"pointer",position:"relative",
+          background:img?"none":"var(--s)",display:"flex",alignItems:"center",justifyContent:"center",
+          borderBottom:"1px solid var(--b2)",overflow:"hidden"}}>
+          {img
+            ?<><img src={img} style={{width:"100%",objectFit:"cover",display:"block",maxHeight:320}} alt="preview"/>
+              <div style={{position:"absolute",inset:0,background:"rgba(0,0,0,0.28)",display:"flex",alignItems:"center",justifyContent:"center"}}>
+                <span style={{color:"rgba(255,255,255,0.85)",fontSize:13,fontWeight:600,background:"rgba(0,0,0,0.35)",padding:"6px 14px",borderRadius:20}}>✎ Trocar imagem</span>
+              </div></>
+            :<div style={{textAlign:"center",color:"var(--t3)",padding:"32px 20px"}}>
+              <div style={{fontSize:40,marginBottom:10}}>🖼️</div>
+              <div style={{fontSize:15,fontWeight:600,color:"var(--t2)",marginBottom:6}}>Toque para adicionar imagem</div>
+              <div style={{fontSize:12}}>A imagem É o aviso. Texto é opcional.</div>
+            </div>
+          }
+        </div>
+      </>)}
+
+      {/* Zona de vídeo — só fundador */}
+      {mediaType==="video"&&isFounder&&(
+        <div style={{borderBottom:"1px solid var(--b2)",padding:20}}>
+          <div style={{fontSize:13,fontWeight:600,marginBottom:10}}>🎬 URL do vídeo</div>
+          <input className="inp" placeholder="https://youtube.com/watch?v=... ou youtu.be/..."
+            value={videoUrl} onChange={e=>setVideoUrl(e.target.value)}/>
+          {parsedVideo&&(
+            <div style={{marginTop:12,borderRadius:10,overflow:"hidden",background:"#000",position:"relative",aspectRatio:"16/9"}}>
+              <iframe src={parsedVideo.embed} style={{width:"100%",height:"100%",border:"none"}}
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                allowFullScreen title="preview"/>
+            </div>
+          )}
+          {videoUrl&&!parsedVideo&&<div className="er" style={{marginTop:8}}>URL inválida — use YouTube ou Vimeo</div>}
+          <p style={{fontSize:11,color:"#fcd34d",marginTop:8}}>⭐ Função exclusiva do fundador · Suporte: YouTube e Vimeo</p>
+        </div>
+      )}
 
       <div style={{padding:20}}>
         <h3 style={{marginBottom:4,fontSize:15}}>{modal==="new"?"Novo Aviso":"Editar Aviso"}</h3>
-        <p style={{fontSize:12,color:"var(--t3)",marginBottom:14}}>Título e texto são opcionais — a imagem já comunica.</p>
         {err&&<div className="er">{err}</div>}
-
         <div className="fr" style={{marginBottom:12}}>
           <div className="fg" style={{marginBottom:0}}><label>Categoria</label>
             <select className="inp" value={tag} onChange={e=>setTag(e.target.value)}>{PTAGS.map(t=><option key={t} value={t}>{t}</option>)}</select>
@@ -1476,16 +1557,14 @@ function AdminPosts({user}){
             </div>
           </div>
         </div>
-
         <div className="fg"><label>Título (opcional)</label>
           <input className="inp" placeholder="ex: Prova amanhã!" value={title} onChange={e=>setTitle(e.target.value)}/></div>
         <div className="fg" style={{marginBottom:18}}><label>Legenda / texto (opcional)</label>
           <textarea className="inp" rows={3} placeholder="Mais detalhes se quiser..." value={body} onChange={e=>setBody(e.target.value)}/></div>
-
         <div style={{display:"flex",gap:8}}>
           <button className="btn btn-f" style={{flex:1}} onClick={submit}>{modal==="new"?"Publicar":"Salvar"}</button>
           {modal!=="new"&&<button className="btn btn-del" onClick={()=>del(modal.id)}>Excluir</button>}
-          {img&&<button className="btn btn-g btn-ico" title="Remover imagem" onClick={()=>setImg(null)} style={{fontSize:14}}>🗑</button>}
+          {mediaType==="image"&&img&&<button className="btn btn-g btn-ico" title="Remover imagem" onClick={()=>setImg(null)} style={{fontSize:14}}>🗑</button>}
           <button className="btn btn-g" onClick={()=>setModal(null)}>✕</button>
         </div>
       </div>
@@ -1507,10 +1586,20 @@ function AdminComms({user}){
 
   const saveComms=v=>{DB.set(K.communities,v);setComms(v);};
   const openNew=()=>{setName("");setType("Escola");setDesc("");setIcon("🏫");setErr("");SFX.open();setModal("new");};
-  const submit=()=>{if(!name.trim()){setErr("Digite o nome.");return;}
-    if(modal==="new")saveComms([...comms,{id:uid(),name:name.trim(),type,desc,icon,createdBy:user.id,createdAt:Date.now()}]);
-    else saveComms(comms.map(c=>c.id===modal.id?{...c,name:name.trim(),type,desc,icon}:c));SFX.close();setModal(null);};
-  const delComm=id=>{saveComms(comms.filter(c=>c.id!==id));setSel(null);SFX.close();setModal(null);};
+  const submit=async()=>{if(!name.trim()){setErr("Digite o nome.");return;}
+    if(modal==="new"){
+      saveComms([...comms,{id:uid(),name:name.trim(),type,desc,icon,createdBy:user.id,createdAt:Date.now()}]);
+      await logAdmin(user.email,user.name,'create_community',name.trim(),type);
+    }else{
+      saveComms(comms.map(c=>c.id===modal.id?{...c,name:name.trim(),type,desc,icon}:c));
+      await logAdmin(user.email,user.name,'edit_community',name.trim(),'');
+    }
+    SFX.close();setModal(null);};
+  const delComm=async(id)=>{
+    const c=comms.find(c=>c.id===id);
+    saveComms(comms.filter(c=>c.id!==id));setSel(null);SFX.close();setModal(null);
+    await logAdmin(user.email,user.name,'delete_community',c?.name||id,'');
+  };
 
   const saveCPost=()=>{
     if(!ptitle.trim()||!pbody.trim()){setPerr("Preencha título e conteúdo.");return;}
@@ -1629,20 +1718,63 @@ function AdminUsers({user:adminUser}){
   const [durIdx,setDurIdx]=useState(0);
   const [reason,setReason]=useState("");
   const [search,setSearch]=useState("");
-  const users=DB.get(K.users)||{};
+  // BUG FIX 4: buscar usuários diretamente do Supabase (não só do localStorage, que pode estar desatualizado)
+  const [users,setUsers]=useState(()=>DB.get(K.users)||{});
+  const [loadingUsers,setLoadingUsers]=useState(USE_SUPABASE);
+
+  useEffect(()=>{
+    if(!USE_SUPABASE||!sb){setLoadingUsers(false);return;}
+    const controller=new AbortController();
+    sb.from("profiles").select("id,name,email")
+      .abortSignal(controller.signal)
+      .then(({data})=>{
+        if(data){
+          const m={};
+          data.forEach(p=>{if(p.email) m[p.email]={id:p.id,name:p.name,email:p.email};});
+          DB._ls_set(K.users,m);
+          setUsers(m);
+        }
+        setLoadingUsers(false);
+      })
+      .catch(()=>setLoadingUsers(false));
+    return()=>controller.abort();
+  },[]);
+
   const others=Object.values(users).filter(u=>u.id!==adminUser.id&&u.email!==FOUNDER);
 
   const filtered=others.filter(u=>!search||(u.name+u.email).toLowerCase().includes(search.toLowerCase()));
 
   const saveBans=v=>{DB.set(K.bans,v);setBans(v);};
-  const banUser=()=>{
+  const banUser=async()=>{
     const dur=BAN_DURATIONS[durIdx];
     const expiresAt=dur.ms?Date.now()+dur.ms:null;
+    // Escreve no Supabase — fonte de verdade, não pode ser contornada pelo banido
+    if(USE_SUPABASE&&sb){
+      try{
+        await sb.from("bans").upsert({
+          user_id:modal.user.id,
+          reason,
+          banned_by:adminUser.name,
+          banned_at:new Date().toISOString(),
+          expires_at:expiresAt?new Date(expiresAt).toISOString():null,
+          type:dur.label
+        });
+      }catch(e){console.warn("[ban]",e.message);}
+    }
     saveBans([...bans.filter(b=>b.userId!==modal.user.id),
       {userId:modal.user.id,reason,bannedBy:adminUser.name,bannedAt:Date.now(),expiresAt,type:dur.label}]);
-    SFX.close();setModal(null);setReason("");
+    await logAdmin(adminUser.email,adminUser.name,'ban',modal.user.email,`${dur.label}${reason?" — "+reason:""}`);
+    SFX.ban();SFX.close();setModal(null);setReason("");
   };
-  const unbanUser=(uid)=>saveBans(bans.filter(b=>b.userId!==uid));
+  const unbanUser=async(uid2)=>{
+    const u=Object.values(users).find(u=>u.id===uid2);
+    // Remove do Supabase — fonte de verdade
+    if(USE_SUPABASE&&sb){
+      try{ await sb.from("bans").delete().eq("user_id",uid2); }catch(e){console.warn("[unban]",e.message);}
+    }
+    saveBans(bans.filter(b=>b.userId!==uid2));
+    await logAdmin(adminUser.email,adminUser.name,'unban',u?.email||uid2,'');
+  };
 
   const activeBans=bans.filter(b=>!b.expiresAt||b.expiresAt>Date.now());
 
@@ -1650,6 +1782,7 @@ function AdminUsers({user:adminUser}){
     <div style={{marginBottom:16}}>
       <input className="inp" placeholder="Buscar usuário por nome ou e-mail..." value={search} onChange={e=>setSearch(e.target.value)}/>
     </div>
+    {loadingUsers&&<G><div className="empty"><div style={{fontSize:22,marginBottom:8}}>⏳</div><p>Carregando usuários...</p></div></G>}
 
     {activeBans.length>0&&(<>
       <div className="section-label" style={{color:"#ff9494"}}>🔨 Usuários Banidos ({activeBans.length})</div>
@@ -1730,15 +1863,19 @@ function AdminAdmins({user}){
   const [email,setEmail]=useState("");const [err,setErr]=useState("");const [ok,setOk]=useState("");
   const users=DB.get(K.users)||{};
   const save=v=>{DB.set(K.admins,v);setAdmins(v);};
-  const add=()=>{
+  const add=async()=>{
     setErr("");setOk("");const e=email.trim().toLowerCase();
     if(!e){setErr("Digite um e-mail.");return;}
     if(e===FOUNDER){setErr("O fundador já é admin permanente.");return;}
     if(admins.includes(e)){setErr("Já é admin.");return;}
     if(!users[e]){setErr("Usuário não encontrado. Precisa ter conta cadastrada.");return;}
     save([...admins,e]);setEmail("");setOk(`${users[e].name} agora é administrador!`);
+    await logAdmin(user.email,user.name,'add_admin',e,'');
   };
-  const rem=e=>{setOk("");setErr("");save(admins.filter(a=>a!==e));};
+  const rem=async(e)=>{
+    setOk("");setErr("");save(admins.filter(a=>a!==e));
+    await logAdmin(user.email,user.name,'remove_admin',e,'');
+  };
   return(<div>
     <G style={{padding:20,marginBottom:14}} tint="rgba(252,211,77,0.05)">
       <div className="section-label" style={{color:"#fcd34d",marginBottom:12}}>Fundador — Admin permanente</div>
@@ -1925,16 +2062,34 @@ function PostsFeed({allPosts, myCommPosts, user}){
               const tc=PCOLORS[p.tag]||"#cbd5e1";
               const isComm=p._src==="comm";
               const hasText=!!(p.title||p.body);
+              const isVideo=!!p.videoUrl;
+              // parseVideoUrl disponível via closure do PostsFeed
+              const pv=isVideo?((url)=>{
+                const ytM=url.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/|shorts\/))([a-zA-Z0-9_-]{11})/);
+                if(ytM) return{embed:`https://www.youtube.com/embed/${ytM[1]}?autoplay=0&rel=0`,thumb:`https://img.youtube.com/vi/${ytM[1]}/hqdefault.jpg`};
+                const vmM=url.match(/vimeo\.com\/(\d+)/);
+                if(vmM) return{embed:`https://player.vimeo.com/video/${vmM[1]}`,thumb:null};
+                return null;
+              })(p.videoUrl):null;
               return(
                 <div key={p.id+i} className="feed-slide"
-                  style={{cursor:hasText?"pointer":"default"}}
-                  onClick={()=>hasText&&setOpenPost(p)}>
+                  style={{cursor:(hasText||isVideo)?"pointer":"default"}}
+                  onClick={()=>(hasText||isVideo)&&setOpenPost(p)}>
 
-                  {/* Background: foto ou gradiente */}
-                  {p.img
-                    ?<img src={p.img} className="feed-img" alt="aviso"/>
-                    :<div className="feed-bg" style={{background:`linear-gradient(160deg,${tc}22 0%,var(--bg2,#2c2c2e) 100%)`}}/>
+                  {/* Background: vídeo (thumbnail) > foto > gradiente */}
+                  {isVideo&&pv?.thumb
+                    ?<img src={pv.thumb} className="feed-img" alt="video"/>
+                    :p.img
+                      ?<img src={p.img} className="feed-img" alt="aviso"/>
+                      :<div className="feed-bg" style={{background:`linear-gradient(160deg,${tc}22 0%,var(--bg2,#2c2c2e) 100%)`}}/>
                   }
+                  {/* Ícone play sobre o thumbnail do vídeo */}
+                  {isVideo&&(
+                    <div style={{position:"absolute",top:"50%",left:"50%",transform:"translate(-50%,-50%)",
+                      width:56,height:56,borderRadius:"50%",background:"rgba(0,0,0,0.65)",backdropFilter:"blur(4px)",
+                      display:"flex",alignItems:"center",justifyContent:"center",fontSize:26,
+                      boxShadow:"0 2px 16px rgba(0,0,0,0.5)",pointerEvents:"none"}}>▶</div>
+                  )}
 
                   {/* Gradiente de legibilidade só se tiver texto */}
                   {hasText&&<div className="feed-gradient"/>}
@@ -1982,11 +2137,26 @@ function PostsFeed({allPosts, myCommPosts, user}){
       }
     </G>
 
-    {/* Modal de leitura completa — só abre se tiver texto */}
+    {/* Modal de leitura completa */}
     {openPost&&(
       <Modal onClose={()=>setOpenPost(null)}>
         <G cls="post-detail si" onClick={e=>e.stopPropagation()}>
-          {openPost.img&&<img src={openPost.img} className="post-detail-img" alt="aviso"/>}
+          {/* Vídeo em destaque */}
+          {openPost.videoUrl&&(()=>{
+            const ytM=openPost.videoUrl.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/|shorts\/))([a-zA-Z0-9_-]{11})/);
+            const vmM=openPost.videoUrl.match(/vimeo\.com\/(\d+)/);
+            const embed=ytM?`https://www.youtube.com/embed/${ytM[1]}?autoplay=1&rel=0`
+              :vmM?`https://player.vimeo.com/video/${vmM[1]}?autoplay=1`:null;
+            return embed?(
+              <div style={{position:"relative",width:"100%",aspectRatio:"16/9",background:"#000"}}>
+                <iframe src={embed} style={{width:"100%",height:"100%",border:"none",display:"block"}}
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                  allowFullScreen title="video"/>
+              </div>
+            ):null;
+          })()}
+          {/* Imagem só se não for vídeo */}
+          {!openPost.videoUrl&&openPost.img&&<img src={openPost.img} className="post-detail-img" alt="aviso"/>}
           <div className="post-detail-body">
             {openPost._src==="comm"&&(
               <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:10}}>
@@ -2000,9 +2170,11 @@ function PostsFeed({allPosts, myCommPosts, user}){
             </div>
             {openPost.title&&<h2 style={{fontSize:20,fontWeight:700,marginBottom:12,lineHeight:1.3}}>{openPost.title}</h2>}
             {openPost.body&&<div style={{fontSize:14,color:"var(--t2)",lineHeight:1.75,whiteSpace:"pre-wrap",marginBottom:20}}>{openPost.body}</div>}
-            <div style={{fontSize:12,color:"var(--t3)",borderTop:"1px solid var(--b2)",paddingTop:12}}>
+            <div style={{fontSize:12,color:"var(--t3)",borderTop:"1px solid var(--b2)",paddingTop:12,marginBottom:16}}>
               Por <strong style={{color:"var(--t2)"}}>{openPost.authorName}</strong> · {fmtTS(openPost.createdAt)}
             </div>
+            {/* Comentários */}
+            {USE_SUPABASE&&<PostComments postId={openPost.id} postType={openPost._src==="comm"?"community":"global"} user={user}/>}
             <button className="btn btn-g" style={{marginTop:14,width:"100%"}} onClick={()=>setOpenPost(null)}>Fechar</button>
           </div>
         </G></Modal>)}
@@ -2023,7 +2195,7 @@ function CommunityTab({user,viewUser,setViewUser}){
         ...(viewUser?[{k:"profile",l:"👤 Perfil"}]:[])
       ].map(t=><button key={t.k} className={`stab ${sub===t.k?"on":""}`} onClick={()=>setSub(t.k)}>{t.l}</button>)}
     </div>
-    {sub==="people"   &&<PeopleTab    user={user} setViewUser={setViewUser} setSub={setSub}/>}
+    {sub==="people"   &&<PeopleTab    user={user}/>}
     {sub==="mycomms"  &&<MyCommsTab   user={user}/>}
     {sub==="allcomms" &&<AllCommsTab  user={user}/>}
     {sub==="friends"  &&<FriendsTab   user={user} setViewUser={setViewUser} setSub={setSub}/>}
@@ -2032,17 +2204,153 @@ function CommunityTab({user,viewUser,setViewUser}){
   </div>);
 }
 
-function PeopleTab({user,setViewUser,setSub}){
+function PeopleTab({user}){
   const [search,setSearch]=useState("");
-  const allUsers=DB.get(K.users)||{};
-  const others=Object.values(allUsers).filter(u=>u.id!==user.id);
-  const filtered=others.filter(u=>!search||(u.name+u.email).toLowerCase().includes(search.toLowerCase()));
+  const [results,setResults]=useState([]);
+  const [loading,setLoading]=useState(false);
+  const [loadingMore,setLoadingMore]=useState(false);
+  const [hasMore,setHasMore]=useState(false);
+  const [page,setPage]=useState(0);
+  const [selected,setSelected]=useState(null);
+  const searchRef=useRef(null);
+  const PAGE_SIZE=20;
+
+  // Reset página ao mudar search
+  useEffect(()=>{ setPage(0); setResults([]); setHasMore(false); },[search]);
+
+  // BUG FIX 2 + PAGINAÇÃO: AbortController, setLoading antes do timeout, paginação via .range()
+  useEffect(()=>{
+    if(!search.trim()){setResults([]);setLoading(false);setHasMore(false);return;}
+    setLoading(true);
+    const controller=new AbortController();
+    const timer=setTimeout(async()=>{
+      try{
+        if(USE_SUPABASE&&sb){
+          const q=search.trim().toLowerCase();
+          const from=0; const to=PAGE_SIZE-1;
+          const{data}=await sb.from("profiles")
+            .select("id,name,email,bio,avatar_url,course,gender,age")
+            .neq("id",user.id)
+            .or(`name.ilike.%${q}%,email.ilike.%${q}%`)
+            .range(from,to)
+            .abortSignal(controller.signal);
+          if(!controller.signal.aborted){
+            setResults(data||[]);
+            setHasMore((data||[]).length===PAGE_SIZE);
+          }
+        }else{
+          const all=Object.values(DB.get(K.users)||{}).filter(u=>u.id!==user.id);
+          const q=search.toLowerCase();
+          const filtered=all.filter(u=>(u.name+u.email).toLowerCase().includes(q));
+          setResults(filtered.slice(0,PAGE_SIZE));
+          setHasMore(filtered.length>PAGE_SIZE);
+        }
+      }catch(e){
+        if(!controller.signal.aborted) console.warn("[search]",e.message);
+      }finally{
+        if(!controller.signal.aborted) setLoading(false);
+      }
+    },350);
+    return()=>{clearTimeout(timer);controller.abort();setLoading(false);};
+  },[search]);
+
+  const loadMore=async()=>{
+    if(loadingMore||!hasMore)return;
+    setLoadingMore(true);
+    try{
+      if(USE_SUPABASE&&sb){
+        const q=search.trim().toLowerCase();
+        const nextPage=page+1;
+        const from=nextPage*PAGE_SIZE; const to=from+PAGE_SIZE-1;
+        const{data}=await sb.from("profiles")
+          .select("id,name,email,bio,avatar_url,course,gender,age")
+          .neq("id",user.id)
+          .or(`name.ilike.%${q}%,email.ilike.%${q}%`)
+          .range(from,to);
+        setResults(prev=>[...prev,...(data||[])]);
+        setHasMore((data||[]).length===PAGE_SIZE);
+        setPage(nextPage);
+      }
+    }catch(e){console.warn("[loadMore]",e.message);}
+    finally{setLoadingMore(false);}
+  };
+
   return(<div>
-    <div className="fg" style={{marginBottom:14}}><input className="inp" placeholder="Buscar pessoas..." value={search} onChange={e=>setSearch(e.target.value)}/></div>
-    {filtered.length===0?<G><div className="empty"><div style={{fontSize:32,marginBottom:8}}>👥</div><p>{search?"Nenhum resultado":"Nenhum outro usuário"}</p></div></G>
-      :filtered.map(u=><UserCard key={u.id} u={u} me={user} onView={()=>{setViewUser(u.id);setSub("profile");}}/>)}
+    {/* Search bar */}
+    <div className="fg" style={{marginBottom:8}}>
+      <input ref={searchRef} className="inp"
+        placeholder="🔍 Buscar por nome ou e-mail..."
+        value={search} onChange={e=>setSearch(e.target.value)}
+        autoComplete="off"/>
+    </div>
+
+    {/* States */}
+    {!search.trim()&&(
+      <G><div className="empty">
+        <div style={{fontSize:32,marginBottom:8}}>🔍</div>
+        <p style={{fontWeight:500}}>Busque por pessoas</p>
+        <p style={{fontSize:12,color:"var(--t3)",marginTop:4}}>Digite um nome ou e-mail para encontrar alguém</p>
+      </div></G>
+    )}
+
+    {search.trim()&&loading&&(
+      <G><div className="empty"><div style={{fontSize:24,marginBottom:8}}>⏳</div><p>Buscando...</p></div></G>
+    )}
+
+    {search.trim()&&!loading&&results.length===0&&(
+      <G><div className="empty">
+        <div style={{fontSize:32,marginBottom:8}}>😕</div>
+        <p>Nenhum usuário encontrado</p>
+        <p style={{fontSize:12,color:"var(--t3)",marginTop:4}}>Tente outro nome ou e-mail</p>
+      </div></G>
+    )}
+
+    {/* Results */}
+    {results.length>0&&(
+      <div style={{display:"flex",flexDirection:"column",gap:6}}>
+        {results.map(u=>(
+          <div key={u.id} className="user-row" style={{cursor:"pointer"}} onClick={()=>setSelected(u)}>
+            <Av src={u.avatar_url} name={u.name} size={42}/>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{fontSize:14,fontWeight:600}}>{u.name}</div>
+              {u.course&&<div style={{fontSize:12,color:"var(--t2)",marginTop:1}}>{u.course}</div>}
+            </div>
+            <div style={{fontSize:12,color:"var(--t3)"}}>Ver perfil →</div>
+          </div>
+        ))}
+        {hasMore&&(
+          <button className="btn btn-g" style={{marginTop:6,width:"100%"}} onClick={loadMore} disabled={loadingMore}>
+            {loadingMore?"Carregando...":"Carregar mais"}
+          </button>
+        )}
+      </div>
+    )}
+
+    {/* Profile popup */}
+    {selected&&(
+      <Modal onClose={()=>setSelected(null)}>
+        <G cls="mp si" style={{maxWidth:420,padding:0,overflow:"hidden"}}>
+          {/* Mini profile card */}
+          <div style={{height:80,background:"linear-gradient(135deg,rgba(125,211,252,0.15),rgba(196,181,253,0.1))",borderRadius:"var(--r) var(--r) 0 0"}}/>
+          <div style={{padding:"0 20px 24px",marginTop:-30}}>
+            <Av src={selected.avatar_url} name={selected.name} size={60}
+              style={{border:"3px solid var(--bg,#1c1c1e)",boxShadow:"0 4px 12px rgba(0,0,0,0.3)"}}/>
+            <div style={{marginTop:10}}>
+              <div style={{fontSize:18,fontWeight:700,letterSpacing:-.3}}>{selected.name}</div>
+              {selected.course&&<div style={{fontSize:13,color:"var(--t2)",marginTop:2}}>{selected.course}</div>}
+              {selected.bio&&<div style={{fontSize:13,color:"var(--t2)",marginTop:8,lineHeight:1.5}}>{selected.bio}</div>}
+            </div>
+            {/* Follow button */}
+            <FollowBtn me={user} theirId={selected.id} style={{marginTop:16,width:"100%"}}/>
+            <button className="btn btn-g" style={{width:"100%",marginTop:8}}
+              onClick={()=>setSelected(null)}>Fechar</button>
+          </div>
+        </G>
+      </Modal>
+    )}
   </div>);
 }
+
 
 function MyCommsTab({user}){
   const myIds=getUserComms(user.id);
@@ -2071,8 +2379,19 @@ function CommCard({comm,user}){
   const [isMember,setIsMember]=useState(()=>isInComm(user.id,comm.id));
   const members=getCommMembers(comm.id);
   const posts=getCPosts(comm.id);
-  const toggle=()=>{
-    isMember?leaveComm(user.id,comm.id):joinComm(user.id,comm.id);
+  // BUG FIX 1: sync join/leave para o Supabase (antes só salvava no localStorage)
+  const toggle=async()=>{
+    if(isMember){
+      leaveComm(user.id,comm.id);
+      if(USE_SUPABASE&&sb){
+        try{ await sb.from("memberships").delete().match({user_id:user.id,community_id:comm.id}); }catch(e){console.warn("[SB] leave comm",e.message);}
+      }
+    }else{
+      joinComm(user.id,comm.id);
+      if(USE_SUPABASE&&sb){
+        try{ await sb.from("memberships").upsert({user_id:user.id,community_id:comm.id}); }catch(e){console.warn("[SB] join comm",e.message);}
+      }
+    }
     setIsMember(m=>!m);
   };
   return(<div className="comm-card">
@@ -2116,6 +2435,24 @@ function FriendsTab({user,setViewUser,setSub}){
     {friendUsers.length===0?<G><div className="empty"><div style={{fontSize:32,marginBottom:8}}>🤝</div><p style={{fontWeight:500}}>Nenhum amigo ainda</p><p style={{fontSize:13,color:"var(--t3)",marginTop:6}}>Quando você e alguém se seguirem mutuamente, viram amigos</p></div></G>
       :friendUsers.map(u=><UserCard key={u.id} u={u} me={user} onView={()=>{setViewUser(u.id);setSub("profile");}}/>)}
   </div>);
+}
+
+function FollowBtn({me,theirId,style={}}){
+  const [following,setFollowing]=useState(()=>isFollowing(me.id,theirId));
+  const [theyFollow,setTheyFollow]=useState(()=>isFollowing(theirId,me.id));
+  const mutual=following&&theyFollow;
+  const toggle=async()=>{
+    await toggleFollow(me.id,theirId);
+    setFollowing(f=>!f);SFX.follow();
+  };
+  return(
+    <button
+      className={`btn ${following?"btn-unfollow":"btn-follow"}`}
+      style={{...style}}
+      onClick={e=>{e.stopPropagation();toggle();}}>
+      {following?(mutual?"✓ Amigos":"✓ Seguindo"):"+ Seguir"}
+    </button>
+  );
 }
 
 function UserCard({u,me,onView}){
@@ -2496,13 +2833,15 @@ function ProfileTab({user,setUser}){
   const friends=getFriends(user.id);const following=getFollowing(user.id);const followers=getFollowers(user.id);
   const subjects=DB.get(K.subjects(user.id))||[];
 
-  const handleAvatarFile=(e)=>{
+  const handleAvatarFile=async(e)=>{
     const file=e.target.files[0];if(!file)return;
-    const r=new FileReader();r.onload=(ev)=>setCropSrc(ev.target.result);r.readAsDataURL(file);
+    const compressed=await compressImage(file,800,0.88);
+    setCropSrc(compressed);
   };
-  const handleBannerFile=(e)=>{
+  const handleBannerFile=async(e)=>{
     const file=e.target.files[0];if(!file)return;
-    const r=new FileReader();r.onload=(ev)=>{setBannerImg(ev.target.result);setBanner(null);};r.readAsDataURL(file);
+    const compressed=await compressImage(file,1400,0.82);
+    setBannerImg(compressed);setBanner(null);
   };
 
   const save=async()=>{
@@ -3189,29 +3528,49 @@ function FeedbackTab({user}){
     {v:"outro",   l:"💬 Outro",   color:"#c4b5fd"},
   ];
 
+  // Rate limiting: máx 3 feedbacks por hora por usuário
+  const RATE_KEY=`sv5_fb_rate_${user.id}`;
+  const RATE_LIMIT=3;
+  const RATE_WINDOW=60*60*1000; // 1 hora em ms
+  const checkRateLimit=()=>{
+    const raw=localStorage.getItem(RATE_KEY);
+    const timestamps=raw?JSON.parse(raw):[];
+    const now2=Date.now();
+    const recent=timestamps.filter(t=>now2-t<RATE_WINDOW);
+    return{ok:recent.length<RATE_LIMIT,remaining:RATE_LIMIT-recent.length,recent};
+  };
+  const recordSend=()=>{
+    const raw=localStorage.getItem(RATE_KEY);
+    const timestamps=raw?JSON.parse(raw):[];
+    const now2=Date.now();
+    const recent=timestamps.filter(t=>now2-t<RATE_WINDOW);
+    localStorage.setItem(RATE_KEY,JSON.stringify([...recent,now2]));
+  };
+
   const submit=async()=>{
     if(!msg.trim()){setErr("Escreva sua mensagem.");return;}
+    const rate=checkRateLimit();
+    if(!rate.ok){
+      setErr(`Limite atingido. Você pode enviar mais ${rate.remaining} feedback${rate.remaining!==1?"s":""} por hora. Tente mais tarde.`);
+      return;
+    }
     setLoading(true);setErr("");
     try{
-      // Save to Supabase feedback table (if exists) or just use a webhook
-      // Using a simple email via mailto as fallback + save to localStorage log
       const feedback={
         id:uid(), userId:user.id, userName:user.name,
         userEmail:user.email, type, message:msg.trim(),
         createdAt:new Date().toISOString()
       };
-      // Save locally as log
       const log=JSON.parse(localStorage.getItem("sv5_feedback_log")||"[]");
       localStorage.setItem("sv5_feedback_log",JSON.stringify([...log,feedback]));
-      // Try to save to Supabase feedback table
       if(USE_SUPABASE&&sb){
-        try{
-          await sb.from("feedback").insert({
-            user_id:user.id, user_name:user.name,
-            user_email:user.email, type, message:msg.trim()
-          });
-        }catch(_){}
+        const{error}=await sb.from("feedback").insert({
+          user_id:user.id, user_name:user.name,
+          user_email:user.email, type, message:msg.trim()
+        });
+        if(error) throw new Error(error.message);
       }
+      recordSend();
       setSent(true);setMsg("");
       setTimeout(()=>setSent(false),4000);
     }catch(e){setErr("Erro ao enviar. Tente novamente.");}
@@ -3265,8 +3624,9 @@ function FeedbackTab({user}){
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,flexWrap:"wrap"}}>
         <div style={{fontSize:12,color:"var(--t3)"}}>
           Enviando como <strong style={{color:"var(--t2)"}}>{user.name}</strong> · {user.email}
+          {(()=>{const r=checkRateLimit();return r.remaining<RATE_LIMIT?<span style={{marginLeft:8,color:r.remaining===0?"#fda4af":"#fcd34d"}}> · {r.remaining}/{RATE_LIMIT} restantes</span>:null;})()}
         </div>
-        <button className="btn btn-f" onClick={submit} disabled={loading||!msg.trim()}
+        <button className="btn btn-f" onClick={submit} disabled={loading||!msg.trim()||!checkRateLimit().ok}
           style={{minWidth:120}}>
           {loading?"Enviando...":"Enviar 📤"}
         </button>
@@ -3285,17 +3645,25 @@ function AdminFeedback(){
   const [filter,setFilter]=useState("todos");
   const [open,setOpen]=useState(null);
 
+  // BUG FIX 3: AbortController + timeout de 15s para evitar o spinner infinito caso
+  // a tabela 'feedback' não exista ou a requisição trave.
   useEffect(()=>{
+    const controller=new AbortController();
+    const timeout=setTimeout(()=>{ controller.abort(); setLoading(false); },15000);
     const load=async()=>{
       if(USE_SUPABASE&&sb){
         try{
-          const{data}=await sb.from("feedback").select("*").order("created_at",{ascending:false});
-          if(data)setItems(data);
-        }catch(e){console.warn("[SB] feedback",e.message);}
+          const{data,error}=await sb.from("feedback").select("*").order("created_at",{ascending:false}).abortSignal(controller.signal);
+          if(error) console.warn("[SB] feedback",error.message);
+          if(data) setItems(data);
+        }catch(e){
+          if(!controller.signal.aborted) console.warn("[SB] feedback",e.message);
+        }
       }
-      setLoading(false);
+      if(!controller.signal.aborted){ clearTimeout(timeout); setLoading(false); }
     };
     load();
+    return()=>{ controller.abort(); clearTimeout(timeout); };
   },[]);
 
   const TYPE_COLORS={"sugestao":"#7dd3fc","bug":"#fda4af","elogio":"#fcd34d","outro":"#c4b5fd"};
@@ -3371,10 +3739,145 @@ function AdminFeedback(){
 
 
 // ══════════════════════════════════════════════════════════════════════════════
+//  ADMIN: LOGS
+// ══════════════════════════════════════════════════════════════════════════════
+function AdminLogs(){
+  const [logs,setLogs]=useState([]);
+  const [loading,setLoading]=useState(true);
+  const ACTION_LABELS={ban:"🔨 Ban",unban:"✅ Unban",add_admin:"⭐ +Admin",remove_admin:"❌ -Admin",create_community:"🏫 Criar comunidade",edit_community:"✎ Editar comunidade",delete_community:"🗑 Excluir comunidade"};
+  const ACTION_COLORS={ban:"#fda4af",unban:"#86efac",add_admin:"#fcd34d",remove_admin:"#fda4af",create_community:"#86efac",edit_community:"#7dd3fc",delete_community:"#fda4af"};
+
+  useEffect(()=>{
+    const controller=new AbortController();
+    const timeout=setTimeout(()=>{controller.abort();setLoading(false);},15000);
+    const load=async()=>{
+      if(USE_SUPABASE&&sb){
+        try{
+          const{data}=await sb.from("admin_logs").select("*").order("created_at",{ascending:false}).limit(200).abortSignal(controller.signal);
+          if(data) setLogs(data);
+        }catch(e){if(!controller.signal.aborted) console.warn("[logs]",e.message);}
+      }
+      if(!controller.signal.aborted){clearTimeout(timeout);setLoading(false);}
+    };
+    load();
+    return()=>{controller.abort();clearTimeout(timeout);};
+  },[]);
+
+  return(<div>
+    <div className="sh">
+      <h2 style={{fontSize:15,color:"var(--t2)"}}>Log de ações administrativas</h2>
+      <span style={{fontSize:13,color:"var(--t2)"}}>{logs.length} registros</span>
+    </div>
+    {loading
+      ?<G><div className="empty"><div style={{fontSize:22,marginBottom:8}}>⏳</div><p>Carregando...</p></div></G>
+      :logs.length===0
+        ?<G><div className="empty"><div style={{fontSize:32,marginBottom:8}}>📋</div><p>Nenhuma ação registrada ainda</p></div></G>
+        :<div style={{display:"flex",flexDirection:"column",gap:6}}>
+          {logs.map(l=>{
+            const c=ACTION_COLORS[l.action]||"#cbd5e1";
+            const lbl=ACTION_LABELS[l.action]||l.action;
+            return(
+              <div key={l.id} style={{padding:"12px 14px",borderRadius:11,background:"var(--card-bg)",border:"1px solid var(--b2)",display:"flex",gap:12,alignItems:"flex-start"}}>
+                <span style={{padding:"2px 9px",borderRadius:20,fontSize:11,fontWeight:600,background:`${c}20`,color:c,border:`1px solid ${c}40`,flexShrink:0,whiteSpace:"nowrap"}}>{lbl}</span>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:13,fontWeight:500,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{l.target||"—"}</div>
+                  {l.detail&&<div style={{fontSize:12,color:"var(--t2)",marginTop:2}}>{l.detail}</div>}
+                  <div style={{fontSize:11,color:"var(--t3)",marginTop:3}}>por <strong style={{color:"var(--t2)"}}>{l.admin_name}</strong> · {new Date(l.created_at).toLocaleString("pt-BR",{day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit"})}</div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+    }
+  </div>);
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+//  POST COMMENTS
+// ══════════════════════════════════════════════════════════════════════════════
+function PostComments({postId,postType="global",user}){
+  const [comments,setComments]=useState([]);
+  const [loading,setLoading]=useState(true);
+  const [body,setBody]=useState("");
+  const [sending,setSending]=useState(false);
+  const [err,setErr]=useState("");
+
+  const load=useCallback(async()=>{
+    if(!USE_SUPABASE||!sb){setLoading(false);return;}
+    try{
+      const{data}=await sb.from("post_comments").select("*").eq("post_id",postId).eq("post_type",postType).order("created_at",{ascending:true});
+      setComments(data||[]);
+    }catch(e){console.warn("[comments]",e.message);}
+    finally{setLoading(false);}
+  },[postId,postType]);
+
+  useEffect(()=>{load();},[load]);
+
+  const send=async()=>{
+    if(!body.trim()){setErr("Escreva um comentário.");return;}
+    if(body.trim().length>500){setErr("Máximo 500 caracteres.");return;}
+    setSending(true);setErr("");
+    try{
+      const{data,error}=await sb.from("post_comments").insert({post_id:postId,post_type:postType,user_id:user.id,user_name:user.name,body:body.trim()}).select().single();
+      if(error) throw new Error(error.message);
+      setComments(prev=>[...prev,data]);
+      setBody("");SFX.save();
+    }catch(e){setErr("Erro ao enviar comentário.");}
+    finally{setSending(false);}
+  };
+
+  const del=async(id)=>{
+    try{
+      await sb.from("post_comments").delete().eq("id",id);
+      setComments(prev=>prev.filter(c=>c.id!==id));
+    }catch(e){console.warn("[del comment]",e.message);}
+  };
+
+  return(
+    <div style={{borderTop:"1px solid var(--b2)",marginTop:16,paddingTop:16}}>
+      <div style={{fontSize:12,fontWeight:600,color:"var(--t2)",textTransform:"uppercase",letterSpacing:.4,marginBottom:12}}>
+        💬 Comentários ({comments.length})
+      </div>
+      {loading&&<div style={{fontSize:12,color:"var(--t3)",marginBottom:10}}>Carregando...</div>}
+      {comments.length>0&&(
+        <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:14}}>
+          {comments.map(c=>(
+            <div key={c.id} style={{display:"flex",gap:10,alignItems:"flex-start"}}>
+              <div style={{width:28,height:28,borderRadius:"50%",background:"rgba(255,255,255,0.1)",border:"1px solid var(--b2)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:600,color:"var(--t2)",flexShrink:0}}>
+                {(c.user_name||"?")[0].toUpperCase()}
+              </div>
+              <div style={{flex:1,background:"var(--card-bg)",border:"1px solid var(--b2)",borderRadius:10,padding:"8px 11px"}}>
+                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:3}}>
+                  <span style={{fontSize:12,fontWeight:600,color:"var(--t)"}}>{c.user_name}</span>
+                  <div style={{display:"flex",alignItems:"center",gap:6}}>
+                    <span style={{fontSize:10,color:"var(--t3)"}}>{new Date(c.created_at).toLocaleString("pt-BR",{day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit"})}</span>
+                    {(c.user_id===user.id||isAdmin(user))&&(
+                      <button onClick={()=>del(c.id)} style={{background:"none",border:"none",cursor:"pointer",color:"rgba(255,80,80,0.45)",fontSize:12,padding:"0 2px",lineHeight:1}}>✕</button>
+                    )}
+                  </div>
+                </div>
+                <div style={{fontSize:13,color:"var(--t2)",lineHeight:1.5,whiteSpace:"pre-wrap"}}>{c.body}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+      {!loading&&comments.length===0&&<div style={{fontSize:12,color:"var(--t3)",marginBottom:12,textAlign:"center",padding:"8px 0"}}>Seja o primeiro a comentar</div>}
+      {err&&<div className="er" style={{marginBottom:8}}>{err}</div>}
+      <div style={{display:"flex",gap:8,alignItems:"flex-end"}}>
+        <textarea className="inp" rows={2} placeholder="Escreva um comentário..." value={body} onChange={e=>setBody(e.target.value)} style={{flex:1,resize:"none",minHeight:60}} onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();send();}}}/>
+        <button className="btn btn-f btn-sm" onClick={send} disabled={sending||!body.trim()} style={{height:60,minWidth:64}}>{sending?"...":"Enviar"}</button>
+      </div>
+      <div style={{fontSize:10,color:"var(--t3)",marginTop:5}}>Enter para enviar · Shift+Enter para nova linha</div>
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
 //  APOIE-NOS — Buy Me a Coffee
 // ══════════════════════════════════════════════════════════════════════════════
 function SupportTab(){
-  const BMC_USER = "vieiratechbr"; 
+  const BMC_USER = "studyvieira"; // ← troca pelo seu usuário do Buy Me a Coffee
 
   return(<div className="fu">
     <G style={{padding:28,maxWidth:500,margin:"0 auto",textAlign:"center"}}>
@@ -3460,9 +3963,35 @@ function AgendaTab({user}){
   const upcoming=all.filter(e=>e.date>=todayD);
   const past=all.filter(e=>e.date<todayD).reverse().slice(0,20);
 
-  // Group upcoming by date
-  const groups={};
-  upcoming.forEach(e=>{(groups[e.date]=groups[e.date]||[]).push(e);});
+  // Exportar agenda como .ics (Google Calendar / iPhone / Outlook)
+  const exportICS=()=>{
+    const toICSDate=(dateStr,timeStr)=>{
+      const d=dateStr.replace(/-/g,"");
+      if(timeStr){const t=timeStr.replace(/:/g,"");return`${d}T${t}00`;}
+      return d;
+    };
+    const escape=s=>(s||"").replace(/\\/g,"\\\\").replace(/;/g,"\\;").replace(/,/g,"\\,").replace(/\n/g,"\\n");
+    const lines=["BEGIN:VCALENDAR","VERSION:2.0","PRODID:-//Study Vieira//Agenda//PT","CALSCALE:GREGORIAN","METHOD:PUBLISH"];
+    all.forEach(e=>{
+      const uid2=`sv-${e.id||uid()}@studyvieira.com`;
+      const dtstart=toICSDate(e.date,e.time||"");
+      const isAllDay=!e.time;
+      lines.push("BEGIN:VEVENT");
+      lines.push(`UID:${uid2}`);
+      lines.push(`SUMMARY:${escape(e.title)}`);
+      if(isAllDay) lines.push(`DTSTART;VALUE=DATE:${dtstart}`);
+      else lines.push(`DTSTART:${dtstart}`);
+      if(e.subj) lines.push(`DESCRIPTION:${escape(e.subj.name+(e.notes?" — "+e.notes:""))}`);
+      else if(e.notes) lines.push(`DESCRIPTION:${escape(e.notes)}`);
+      lines.push(`DTSTAMP:${new Date().toISOString().replace(/[-:.]/g,"").slice(0,15)}Z`);
+      lines.push("END:VEVENT");
+    });
+    lines.push("END:VCALENDAR");
+    const blob=new Blob([lines.join("\r\n")],{type:"text/calendar;charset=utf-8"});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement("a");a.href=url;a.download="agenda-studyvieira.ics";a.click();
+    URL.revokeObjectURL(url);
+  };
 
   const Row=({e})=>{
     const isAgenda=e._src==="agenda";
@@ -3500,7 +4029,10 @@ function AgendaTab({user}){
   return(<div className="fu">
     <div className="sh">
       <h2>Agenda</h2>
-      <button className="btn btn-f btn-sm" onClick={openNew}>+ Novo Evento</button>
+      <div style={{display:"flex",gap:8}}>
+        {all.length>0&&<button className="btn btn-g btn-sm" onClick={exportICS} title="Exportar para Google Calendar / iPhone">📅 Exportar .ics</button>}
+        <button className="btn btn-f btn-sm" onClick={openNew}>+ Novo Evento</button>
+      </div>
     </div>
 
     {all.length===0
