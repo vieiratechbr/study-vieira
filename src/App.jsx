@@ -659,6 +659,7 @@ body{font-family:'Figtree',-apple-system,sans-serif;background:var(--bg);min-hei
 /* ── Heatmap ── */
 .heat-cell{width:12px;height:12px;border-radius:2px;transition:background .2s;}
 @keyframes fu{from{opacity:0;transform:translateY(10px);}to{opacity:1;transform:none;}}
+@keyframes spin{from{transform:rotate(0deg);}to{transform:rotate(360deg);}}
 
 .card-bg{background:var(--card-bg);}
 .alert-error{padding:9px 13px;border-radius:9px;font-size:13px;margin-bottom:12px;background:rgba(255,70,70,0.11);border:1px solid rgba(255,70,70,0.2);color:#ff9494;}
@@ -1434,9 +1435,16 @@ function AdminPosts({user}){
     const post={id:uid(),img:mediaType==="image"?img:null,videoUrl:mediaType==="video"&&parsedVideo?videoUrl:null,
       title:title.trim(),body:body.trim(),tag,pinned,authorName:user.name,authorEmail:user.email,createdAt:Date.now()};
     if(modal==="new"){
-      save([...posts,post]);
-      if(USE_SUPABASE) await sb.from("posts").insert({title:post.title||null,body:post.body||null,img:post.img||null,
-        video_url:post.videoUrl||null,tag:post.tag,pinned:post.pinned,author_name:post.authorName,author_email:post.authorEmail});
+      if(USE_SUPABASE){
+        // Insere no Supabase e re-busca para garantir sincronismo
+        await sb.from("posts").insert({title:post.title||null,body:post.body||null,img:post.img||null,
+          video_url:post.videoUrl||null,tag:post.tag,pinned:post.pinned,author_name:post.authorName,author_email:post.authorEmail});
+        const{data:fresh}=await sb.from("posts").select("*").order("created_at",{ascending:false});
+        if(fresh){
+          const mapped=fresh.map(p=>({id:p.id,title:p.title,body:p.body,img:p.img,videoUrl:p.video_url||null,tag:p.tag,pinned:p.pinned,authorName:p.author_name,authorEmail:p.author_email,createdAt:new Date(p.created_at).getTime()}));
+          _LS.set(K.posts,mapped); save(mapped);
+        }
+      }else{ save([...posts,post]); }
     }else{
       save(posts.map(p=>p.id===modal.id?{...p,...post,id:modal.id}:p));
       if(USE_SUPABASE) await sb.from("posts").update({title:post.title||null,body:post.body||null,
@@ -1918,15 +1926,51 @@ function AdminAdmins({user}){
 // ══════════════════════════════════════════════════════════════════════════════
 function HomePage({user,setTab}){
   const subjects=DB.get(K.subjects(user.id))||[];
-  const globalPosts=getGlobalPosts();
-  const pinned=globalPosts.filter(p=>p.pinned);const normal=globalPosts.filter(p=>!p.pinned);
+
+  // Busca posts e cposts direto do Supabase a cada vez que a Home abre
+  const [globalPosts,setGlobalPosts]=useState(()=>getGlobalPosts());
+  const [cposts,setCposts]=useState(()=>DB.get(K.cposts)||[]);
+  const [loadingPosts,setLoadingPosts]=useState(USE_SUPABASE);
+
+  useEffect(()=>{
+    if(!USE_SUPABASE||!sb){setLoadingPosts(false);return;}
+    let cancelled=false;
+    const fetchPosts=async()=>{
+      try{
+        const [{data:posts},{data:cp}]=await Promise.all([
+          sb.from("posts").select("*").order("created_at",{ascending:false}),
+          sb.from("community_posts").select("*").order("created_at",{ascending:false}),
+        ]);
+        if(cancelled) return;
+        if(posts){
+          const mapped=posts.map(p=>({id:p.id,title:p.title,body:p.body,img:p.img,videoUrl:p.video_url||null,tag:p.tag,pinned:p.pinned,authorName:p.author_name,authorEmail:p.author_email,createdAt:new Date(p.created_at).getTime()}));
+          _LS.set(K.posts,mapped);
+          setGlobalPosts(mapped.sort((a,b)=>(b.pinned?1:0)-(a.pinned?1:0)||b.createdAt-a.createdAt));
+        }
+        if(cp){
+          const mappedCp=cp.map(p=>({id:p.id,communityId:p.community_id,title:p.title,body:p.body,img:p.img,tag:p.tag,pinned:p.pinned,authorName:p.author_name,createdAt:new Date(p.created_at).getTime()}));
+          _LS.set(K.cposts,mappedCp);
+          setCposts(mappedCp);
+        }
+      }catch(e){console.warn("[posts fetch]",e.message);}
+      finally{if(!cancelled) setLoadingPosts(false);}
+    };
+    fetchPosts();
+    // Também refetch quando o usuário volta para a aba do navegador
+    const onFocus=()=>fetchPosts();
+    window.addEventListener("focus",onFocus);
+    return()=>{cancelled=true;window.removeEventListener("focus",onFocus);};
+  },[]);
+
+  const pinned=globalPosts.filter(p=>p.pinned);
+  const normal=globalPosts.filter(p=>!p.pinned);
   const sorted=[...pinned,...normal];
 
   // community posts for this user
   const myComms=getUserComms(user.id);
   const myCommPosts=myComms.flatMap(cid=>{
     const comm=getCommunities().find(c=>c.id===cid);
-    return getCPosts(cid).map(p=>({...p,commName:comm?.name,commIcon:comm?.icon}));
+    return cposts.filter(p=>p.communityId===cid).map(p=>({...p,commName:comm?.name,commIcon:comm?.icon}));
   }).sort((a,b)=>b.createdAt-a.createdAt).slice(0,5);
 
   const now2=new Date();
@@ -2007,7 +2051,7 @@ function HomePage({user,setTab}){
 
       {/* RIGHT: Feed de Avisos — fills grid cell height via absolute positioning */}
       <div className="hright">
-        <PostsFeed allPosts={sorted} myCommPosts={myCommPosts} user={user}/>
+        <PostsFeed allPosts={sorted} myCommPosts={myCommPosts} user={user} loading={loadingPosts}/>
       </div>
     </div>
   </div>);
@@ -2017,7 +2061,7 @@ function HomePage({user,setTab}){
 // ══════════════════════════════════════════════════════════════════════════════
 //  POSTS FEED — Instagram-style scroll snap
 // ══════════════════════════════════════════════════════════════════════════════
-function PostsFeed({allPosts, myCommPosts, user}){
+function PostsFeed({allPosts, myCommPosts, user, loading=false}){
   const [openPost,setOpenPost]=useState(null);
   const feedRef=useRef(null);
   const [activeIdx,setActiveIdx]=useState(0);
@@ -2048,7 +2092,12 @@ function PostsFeed({allPosts, myCommPosts, user}){
         </div>
       </div>
 
-      {feed.length===0
+      {loading
+        ?<div className="empty" style={{padding:"40px 20px",flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center"}}>
+            <div style={{width:40,height:40,borderRadius:"50%",border:"3px solid var(--b2)",borderTopColor:"var(--t2)",animation:"spin .8s linear infinite",marginBottom:12}}/>
+            <p style={{fontSize:13,color:"var(--t3)"}}>Carregando avisos...</p>
+          </div>
+        :feed.length===0
         ?<div className="empty" style={{padding:"40px 20px",flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center"}}>
             <div style={{fontSize:32,marginBottom:8}}>🖼️</div>
             <p style={{fontWeight:500}}>Nenhum aviso</p>
