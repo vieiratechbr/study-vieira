@@ -923,7 +923,12 @@ export default function App(){
     };
     init();
     const{data:{subscription}}=sb.auth.onAuthStateChange(async(event,session)=>{
-      if(event==="SIGNED_OUT"){setUser(null);setActiveBan(null);}
+      if(event==="SIGNED_OUT"){
+        setUser(null);
+        // NÃO limpa activeBan aqui — se o signOut foi causado por um ban,
+        // precisamos manter a tela de "conta suspensa" visível.
+        // activeBan só é zerado no logout explícito do usuário (botão Sair).
+      }
       else if(session?.user){
         await _loginFromSession(session.user);
         _syncFromSupabase(session.user.id).catch(()=>{});
