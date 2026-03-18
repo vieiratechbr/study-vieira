@@ -749,8 +749,15 @@ function Pill({color,label}){
 function Av({src,name,size=30,onClick,editable=false}){
   const s={width:size,height:size,fontSize:Math.round(size*.38)};
   const initials=(name||"?").split(" ").map(w=>w[0]).slice(0,2).join("").toUpperCase();
-  const inner=src
-    ?<img src={src} className="av" style={s} alt={name}/>
+  const [imgErr,setImgErr]=useState(false);
+  const showImg=src&&!imgErr;
+  const inner=showImg
+    // Container com overflow:hidden garante que a foto nunca vaza fora do círculo
+    ?<div style={{width:size,height:size,borderRadius:"50%",overflow:"hidden",flexShrink:0,
+        border:"1px solid rgba(255,255,255,0.2)"}}>
+        <img src={src} style={{width:"100%",height:"100%",objectFit:"cover",display:"block"}}
+          alt={name} onError={()=>setImgErr(true)}/>
+      </div>
     :<div className="av-placeholder" style={s}>{initials}</div>;
   if(!editable)return <div style={{cursor:onClick?"pointer":"default",flexShrink:0}} onClick={onClick}>{inner}</div>;
   return <div className="av-upload" onClick={onClick} style={{width:size,height:size,flexShrink:0}}>
@@ -2576,8 +2583,20 @@ function UserProfileView({uid:targetId,me,onBack}){
         <div style={{display:"flex",alignItems:"flex-end",justifyContent:"space-between",marginBottom:14}}>
           <div style={{marginTop:-44}}>
             {profLoading
-              ?<div style={{width:76,height:76,borderRadius:"50%",background:"rgba(255,255,255,0.08)",border:"3px solid var(--bg)"}}/>
-              :<Av src={prof.avatar} name={u.name} size={76}/>
+              ?<div style={{width:76,height:76,borderRadius:"50%",background:"rgba(255,255,255,0.08)",
+                  border:"3px solid var(--bg)",flexShrink:0}}/>
+              :<div style={{width:76,height:76,borderRadius:"50%",overflow:"hidden",
+                  border:"3px solid var(--bg)",boxShadow:"0 2px 12px rgba(0,0,0,0.4)",flexShrink:0}}>
+                {prof.avatar
+                  ?<img src={prof.avatar} style={{width:"100%",height:"100%",objectFit:"cover",display:"block"}} alt={u.name}
+                      onError={e=>{e.currentTarget.style.display="none";e.currentTarget.nextSibling.style.display="flex";}}/>
+                  :null}
+                <div style={{width:"100%",height:"100%",background:"rgba(255,255,255,0.12)",
+                  display:prof.avatar?"none":"flex",alignItems:"center",justifyContent:"center",
+                  fontSize:28,fontWeight:700,color:"var(--t)"}}>
+                  {(u.name||"?").split(" ").map(w=>w[0]).slice(0,2).join("").toUpperCase()}
+                </div>
+              </div>
             }
           </div>
           <button className={`btn btn-sm ${following?"btn-unfollow":"btn-follow"}`} onClick={toggle}>{following?"Seguindo":"+ Seguir"}</button>
