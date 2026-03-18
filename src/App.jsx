@@ -3882,7 +3882,7 @@ function PostComments({postId,postType="global",user}){
 //  APOIE-NOS — Buy Me a Coffee
 // ══════════════════════════════════════════════════════════════════════════════
 function SupportTab(){
-  const BMC_USER = "studyvieira"; // ← troca pelo seu usuário do Buy Me a Coffee
+  const BMC_USER = "vieiratechbr";
 
   return(<div className="fu">
     <G style={{padding:28,maxWidth:500,margin:"0 auto",textAlign:"center"}}>
