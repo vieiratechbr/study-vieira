@@ -2486,26 +2486,62 @@ function UserProfileView({uid:targetId,me,onBack}){
   const [theyFollow]=useState(()=>isFollowing(targetId,me.id));
   const allUsers=DB.get(K.users)||{};
   const u=Object.values(allUsers).find(u=>u.id===targetId);
-  const prof=getProfile(targetId);
-  const subjects=DB.get(K.subjects(targetId))||[];
+  // Carrega perfil do Supabase (avatar, bio, banner, curso, etc.)
+  const [prof,setProf]=useState(()=>getProfile(targetId));
+  const [profLoading,setProfLoading]=useState(USE_SUPABASE);
+  useEffect(()=>{
+    if(!USE_SUPABASE||!sb){setProfLoading(false);return;}
+    sb.from("profiles").select("*").eq("id",targetId).maybeSingle()
+      .then(({data:p})=>{
+        if(p){
+          const fresh={
+            avatar:p.avatar_url||null, bio:p.bio||"",
+            banner:p.banner||null, bannerImg:p.banner_img||null,
+            gender:p.gender||null, age:p.age||null, course:p.course||null
+          };
+          _LS.set(`sv5_prof_${targetId}`,fresh);
+          setProf(fresh);
+        }
+        setProfLoading(false);
+      })
+      .catch(()=>setProfLoading(false));
+  },[targetId]);
+
+  const subjects=DB.get(`sv5_subj_${targetId}`)||[];
   const mutual=following&&theyFollow;
   const foll=getFollowing(targetId);const followrs=getFollowers(targetId);
   const toggle=()=>{toggleFollow(me.id,targetId);setFollowing(f=>!f);};
   if(!u)return null;
   const BANNERS=["linear-gradient(135deg,#374151,#1f2937)","linear-gradient(135deg,#1e3a5f,#0f2847)","linear-gradient(135deg,#2d1b4e,#1a0f30)","linear-gradient(135deg,#1a3320,#0d1f14)","linear-gradient(135deg,#3d2020,#231212)"];
-  const banner=BANNERS[targetId.charCodeAt(0)%BANNERS.length];
+  const bannerStyle=prof.bannerImg
+    ?{backgroundImage:`url(${prof.bannerImg})`,backgroundSize:"cover",backgroundPosition:"center"}
+    :prof.banner
+      ?{background:prof.banner}
+      :{background:BANNERS[targetId.charCodeAt(0)%BANNERS.length]};
+
   return(<div>
     <div className="back" onClick={onBack}>← Voltar</div>
     <G style={{padding:0,marginBottom:16}}>
-      <div className="prof-banner" style={{background:banner}}><div style={{position:"absolute",inset:0,background:"rgba(0,0,0,0.15)"}}/></div>
+      <div className="prof-banner" style={{...bannerStyle}}><div style={{position:"absolute",inset:0,background:"rgba(0,0,0,0.15)"}}/></div>
       <div style={{padding:"0 20px 20px",marginTop:12}}>
         <div style={{display:"flex",alignItems:"flex-end",justifyContent:"space-between",marginBottom:14}}>
-          <div style={{marginTop:-44}}><Av src={prof.avatar} name={u.name} size={76}/></div>
+          <div style={{marginTop:-44}}>
+            {profLoading
+              ?<div style={{width:76,height:76,borderRadius:"50%",background:"rgba(255,255,255,0.08)",border:"3px solid var(--bg)"}}/>
+              :<Av src={prof.avatar} name={u.name} size={76}/>
+            }
+          </div>
           <button className={`btn btn-sm ${following?"btn-unfollow":"btn-follow"}`} onClick={toggle}>{following?"Seguindo":"+ Seguir"}</button>
         </div>
         <div style={{fontSize:18,fontWeight:700}}>{u.name}</div>
         {mutual&&<div style={{fontSize:12,color:"#86efac",marginTop:3}}>🤝 Vocês são amigos</div>}
         {!mutual&&theyFollow&&<div style={{fontSize:12,color:"#7dd3fc",marginTop:3}}>Segue você</div>}
+        {/* Detalhes extras do perfil */}
+        <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:6}}>
+          {prof.age&&<Pill color="#7dd3fc" label={`${prof.age} anos`}/>}
+          {prof.gender&&prof.gender!=="Prefiro não dizer"&&<Pill color="#c4b5fd" label={prof.gender}/>}
+          {prof.course&&<Pill color="#86efac" label={prof.course}/>}
+        </div>
         {prof.bio&&<div style={{fontSize:13,color:"var(--t2)",marginTop:8,lineHeight:1.5}}>{prof.bio}</div>}
       </div>
       <div style={{borderTop:"1px solid var(--b2)"}}>
@@ -2519,10 +2555,10 @@ function UserProfileView({uid:targetId,me,onBack}){
     {mutual?(subjects.length===0?<G><div className="empty"><div style={{fontSize:28,marginBottom:8}}>📚</div><p>{u.name.split(" ")[0]} ainda não tem matérias</p></div></G>
       :<><div className="section-label" style={{marginBottom:12}}>📚 Matérias de {u.name.split(" ")[0]}</div>
         <div className="g2">{subjects.map(s=>{
-          const conts=DB.get(K.contents(targetId,s.id))||[];const provas=DB.get(K.provas(targetId,s.id))||[];
-          return(<G key={s.id} tint={s.color.tint} style={{padding:16,borderTop:`2px solid ${s.color.dot}40`}}>
+          const conts=DB.get(`sv5_cont_${targetId}_${s.id}`)||[];const provas=DB.get(`sv5_prov_${targetId}_${s.id}`)||[];
+          return(<G key={s.id} tint={s.color?.tint} style={{padding:16,borderTop:`2px solid ${s.color?.dot||"#7dd3fc"}40`}}>
             <div className="row" style={{marginBottom:8}}>
-              <div className="dot" style={{background:s.color.dot,boxShadow:`0 0 7px ${s.color.glow}`}}/>
+              <div className="dot" style={{background:s.color?.dot,boxShadow:`0 0 7px ${s.color?.glow}`}}/>
               <div style={{fontWeight:600,fontSize:14,flex:1}}>{s.name}</div>
             </div>
             {s.desc&&<p style={{fontSize:12,color:"var(--t2)",marginBottom:8}}>{s.desc}</p>}
