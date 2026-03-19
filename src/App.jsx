@@ -2492,7 +2492,8 @@ function AvatarCropper({src,onDone,onCancel}){
     const ctx=out.getContext("2d");
     ctx.beginPath();ctx.arc(100,100,100,0,Math.PI*2);ctx.clip();
     ctx.drawImage(canvas,0,0,SIZE,SIZE,0,0,200,200);
-    onDone(out.toDataURL("image/jpeg",0.92));
+    // Entrega um Blob diretamente — evita base64 gigante na memória
+    out.toBlob((blob)=>{ if(blob) onDone(blob); },"image/jpeg",0.88);
   };
 
   return(<div style={{textAlign:"center"}}>
@@ -2564,11 +2565,10 @@ function BannerCropper({src,onDone,onCancel}){
   const onTouchMove=(e)=>{if(!dragging)return;const t=e.touches[0];setOffset({x:t.clientX-start.x,y:t.clientY-start.y});};
 
   const confirm=()=>{
-    // Exporta em 800x224 (suficiente para o banner, ~30KB — evita payload gigante no Supabase)
     const canvas=canvasRef.current;
     const out=document.createElement("canvas");out.width=800;out.height=224;
     out.getContext("2d").drawImage(canvas,0,0,W,H,0,0,800,224);
-    onDone(out.toDataURL("image/jpeg",0.85));
+    out.toBlob((blob)=>{ if(blob) onDone(blob); },"image/jpeg",0.85);
   };
 
   return(<div style={{textAlign:"center"}}>
@@ -2797,18 +2797,25 @@ function ProfileTab({user,setUser,isDonorTheme=false,setIsDonorTheme=()=>{},show
   const [editing,setEditing]=useState(false);
   const [name,setName]=useState(user.name);
   const [bio,setBio]=useState(prof.bio||"");
-  const [avatar,setAvatar]=useState(prof.avatar||"");
+  const [avatar,setAvatar]=useState(prof.avatar||"");       // URL ou objectURL para preview
+  const [avatarBlob,setAvatarBlob]=useState(null);          // Blob para upload
   const [cropSrc,setCropSrc]=useState(null);
   const [bannerCropSrc,setBannerCropSrc]=useState(null);
   const [banner,setBanner]=useState(prof.banner||BANNER_PRESETS[user.id.charCodeAt(0)%BANNER_PRESETS.length]);
-  const [bannerImg,setBannerImg]=useState(prof.bannerImg||null);
+  const [bannerImg,setBannerImg]=useState(prof.bannerImg||null); // URL ou objectURL para preview
+  const [bannerBlob,setBannerBlob]=useState(null);               // Blob para upload
   const [gender,setGender]=useState(prof.gender||"Prefiro não dizer");
   const [age,setAge]=useState(prof.age||"");
   const [course,setCourse]=useState(prof.course||"");
   const [ok,setOk]=useState("");
   // Apoiador
-  const [donorStatus,setDonorStatus]=useState(null); // null | {status,expires_at}
+  const [donorStatus,setDonorStatus]=useState(null);
   const [showDonorModal,setShowDonorModal]=useState(false);
+  // Limpa objectURLs ao desmontar para não vazar memória
+  const objUrlsRef=useRef([]);
+  useEffect(()=>{
+    return()=>{ objUrlsRef.current.forEach(u=>URL.revokeObjectURL(u)); };
+  },[]);
 
   // Re-read profile from Supabase on mount to get fresh data
   useEffect(()=>{
@@ -2845,10 +2852,11 @@ function ProfileTab({user,setUser,isDonorTheme=false,setIsDonorTheme=()=>{},show
   const friends=getFriends(user.id);const following=getFollowing(user.id);const followers=getFollowers(user.id);
   const subjects=DB.get(K.subjects(user.id))||[];
 
-  const handleAvatarFile=async(e)=>{
+  const handleAvatarFile=(e)=>{
     const file=e.target.files[0];if(!file)return;
-    const compressed=await compressImage(file,800,0.88);
-    setCropSrc(compressed);
+    const url=URL.createObjectURL(file);
+    objUrlsRef.current.push(url);
+    setCropSrc(url);
   };
   const handleBannerFile=async(e)=>{
     const file=e.target.files[0];if(!file)return;
@@ -2865,21 +2873,26 @@ function ProfileTab({user,setUser,isDonorTheme=false,setIsDonorTheme=()=>{},show
     setEditing(false);
 
     if(USE_SUPABASE){
+      // Upload avatar Blob direto para Storage — sem base64, sem fetch, sem estourar memória
       let avatarUrl=avatar||null;
-      if(avatar&&avatar.startsWith("data:")){
+      if(avatarBlob){
         try{
-          const res=await fetch(avatar);const blob=await res.blob();
           const path=`avatars/${user.id}.jpg`;
-          const{error:upErr}=await sb.storage.from("avatars").upload(path,blob,{upsert:true,contentType:"image/jpeg"});
-          if(!upErr){const{data:pub}=sb.storage.from("avatars").getPublicUrl(path);avatarUrl=pub.publicUrl;}
-        }catch(e){console.warn("[SB] avatar upload",e.message);}
+          const{error:upErr}=await sb.storage.from("avatars").upload(path,avatarBlob,{upsert:true,contentType:"image/jpeg"});
+          if(upErr) throw new Error(upErr.message);
+          const{data:pub}=sb.storage.from("avatars").getPublicUrl(path);
+          avatarUrl=pub.publicUrl;
+        }catch(e){
+          showToast("⚠️ Erro ao enviar foto: "+e.message,"er",6000);
+          return;
+        }
       }
+      // Upload banner Blob
       let bannerImgUrl=bannerImg||null;
-      if(bannerImg&&bannerImg.startsWith("data:")){
+      if(bannerBlob){
         try{
-          const res=await fetch(bannerImg);const blob=await res.blob();
           const path=`banners/${user.id}.jpg`;
-          const{error:upErr}=await sb.storage.from("avatars").upload(path,blob,{upsert:true,contentType:"image/jpeg"});
+          const{error:upErr}=await sb.storage.from("avatars").upload(path,bannerBlob,{upsert:true,contentType:"image/jpeg"});
           if(!upErr){const{data:pub}=sb.storage.from("avatars").getPublicUrl(path);bannerImgUrl=pub.publicUrl;}
         }catch(e){console.warn("[SB] banner upload",e.message);}
       }
@@ -2896,6 +2909,7 @@ function ProfileTab({user,setUser,isDonorTheme=false,setIsDonorTheme=()=>{},show
       const freshProf={...np,avatar:avatarUrl,bannerImg:bannerImgUrl};
       saveProfile(user.id,freshProf);setProf(freshProf);
       setAvatar(avatarUrl||"");setBannerImg(bannerImgUrl);
+      setAvatarBlob(null);setBannerBlob(null); // limpa blobs após upload bem-sucedido
     }
     showToast("✅ Perfil atualizado!","ok");
     SFX.save();
@@ -2908,7 +2922,13 @@ function ProfileTab({user,setUser,isDonorTheme=false,setIsDonorTheme=()=>{},show
     {cropSrc&&(
       <Modal onClose={()=>setCropSrc(null)}><G cls="mp si" style={{maxWidth:340}}>
         <h3 style={{marginBottom:14,fontSize:16,textAlign:"center"}}>✂️ Recortar foto</h3>
-        <AvatarCropper src={cropSrc} onDone={(cropped)=>{setAvatar(cropped);setCropSrc(null);}} onCancel={()=>setCropSrc(null)}/>
+        <AvatarCropper src={cropSrc} onDone={(blob)=>{
+            const url=URL.createObjectURL(blob);
+            objUrlsRef.current.push(url);
+            setAvatar(url);
+            setAvatarBlob(blob);
+            setCropSrc(null);
+          }} onCancel={()=>setCropSrc(null)}/>
       </G></Modal>)}
 
     {/* Crop de banner */}
@@ -2916,7 +2936,14 @@ function ProfileTab({user,setUser,isDonorTheme=false,setIsDonorTheme=()=>{},show
       <Modal onClose={()=>setBannerCropSrc(null)}><G cls="mp si" style={{maxWidth:600}}>
         <h3 style={{marginBottom:14,fontSize:16,textAlign:"center"}}>✂️ Recortar banner</h3>
         <BannerCropper src={bannerCropSrc}
-          onDone={(cropped)=>{setBannerImg(cropped);setBanner(null);setBannerCropSrc(null);}}
+          onDone={(blob)=>{
+            const url=URL.createObjectURL(blob);
+            objUrlsRef.current.push(url);
+            setBannerImg(url);
+            setBannerBlob(blob);
+            setBanner(null);
+            setBannerCropSrc(null);
+          }}
           onCancel={()=>setBannerCropSrc(null)}/>
       </G></Modal>)}
 
