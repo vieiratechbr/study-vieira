@@ -709,13 +709,28 @@ export default function App(){
     return(<>
       <div className="mesh"/>
       <div className="mobile-msg">
-        <div style={{fontSize:64,marginBottom:20}}>📱</div>
-        <div style={{fontSize:24,fontWeight:700,color:"white",letterSpacing:-.5,marginBottom:10}}>Em breve nas lojas!</div>
-        <div style={{fontSize:14,color:"rgba(255,255,255,0.5)",lineHeight:1.8,marginBottom:28,maxWidth:260}}>
-          O app do <strong style={{color:"white"}}>Study Vieira</strong> está chegando para iOS e Android.
+        <div style={{fontSize:68,marginBottom:12,filter:"drop-shadow(0 4px 28px rgba(125,211,252,0.25))"}}>◈</div>
+        <div style={{fontSize:24,fontWeight:800,color:"#fff",letterSpacing:-.5,marginBottom:4}}>Study Vieira</div>
+        <div style={{fontSize:12,color:"rgba(255,255,255,0.38)",marginBottom:32,letterSpacing:.3}}>Organizador de estudos</div>
+        <div style={{width:"100%",maxWidth:300,background:"linear-gradient(135deg,rgba(125,211,252,0.07),rgba(165,180,252,0.05))",
+          border:"1px solid rgba(125,211,252,0.18)",borderRadius:22,padding:"28px 24px",marginBottom:24}}>
+          <div style={{fontSize:40,marginBottom:12}}>📱</div>
+          <div style={{fontSize:17,fontWeight:700,color:"#fff",marginBottom:8,letterSpacing:-.3}}>App disponível para Android</div>
+          <div style={{fontSize:13,color:"rgba(255,255,255,0.48)",lineHeight:1.8,marginBottom:20}}>
+            Baixe gratuitamente e acesse suas matérias, agenda e avisos pelo celular.
+          </div>
+          <a href="https://studyvieira.com/app/study-vieira.apk" download
+            style={{display:"flex",alignItems:"center",justifyContent:"center",gap:10,
+              padding:"13px 0",borderRadius:14,width:"100%",
+              background:"linear-gradient(135deg,rgba(125,211,252,0.22),rgba(165,180,252,0.16))",
+              border:"1px solid rgba(125,211,252,0.32)",color:"#fff",textDecoration:"none",
+              fontSize:15,fontWeight:700,boxShadow:"0 4px 20px rgba(125,211,252,0.15)"}}>
+            <span style={{fontSize:20}}>⬇️</span> Baixar APK
+          </a>
         </div>
-        <div style={{padding:"10px 20px",borderRadius:12,background:"rgba(255,255,255,0.07)",border:"1px solid rgba(255,255,255,0.12)",color:"rgba(255,255,255,0.5)",fontSize:13}}>
-          🖥️ Use pelo computador por enquanto
+        <div style={{fontSize:11,color:"rgba(255,255,255,0.22)",textAlign:"center",lineHeight:1.8,maxWidth:260}}>
+          Após baixar, habilite <span style={{color:"rgba(255,255,255,0.38)",fontWeight:600}}>Fontes desconhecidas</span> nas configurações do Android para instalar.
+          <br/><br/>🖥️ Para o site completo, acesse pelo computador.
         </div>
       </div>
       <div className="pc">
@@ -739,6 +754,32 @@ export default function App(){
 
   return(<>
     <div className="mesh"/>
+    {/* Tela mobile — esconde o site e mostra download do app */}
+    <div className="mobile-msg">
+      <div style={{fontSize:68,marginBottom:12,filter:"drop-shadow(0 4px 28px rgba(125,211,252,0.25))"}}>◈</div>
+      <div style={{fontSize:24,fontWeight:800,color:"#fff",letterSpacing:-.5,marginBottom:4}}>Study Vieira</div>
+      <div style={{fontSize:12,color:"rgba(255,255,255,0.38)",marginBottom:32,letterSpacing:.3}}>Organizador de estudos</div>
+      <div style={{width:"100%",maxWidth:300,background:"linear-gradient(135deg,rgba(125,211,252,0.07),rgba(165,180,252,0.05))",
+        border:"1px solid rgba(125,211,252,0.18)",borderRadius:22,padding:"28px 24px",marginBottom:24}}>
+        <div style={{fontSize:40,marginBottom:12}}>📱</div>
+        <div style={{fontSize:17,fontWeight:700,color:"#fff",marginBottom:8,letterSpacing:-.3}}>App disponível para Android</div>
+        <div style={{fontSize:13,color:"rgba(255,255,255,0.48)",lineHeight:1.8,marginBottom:20}}>
+          Baixe gratuitamente e acesse suas matérias, agenda e avisos pelo celular.
+        </div>
+        <a href="https://studyvieira.com/app/study-vieira.apk" download
+          style={{display:"flex",alignItems:"center",justifyContent:"center",gap:10,
+            padding:"13px 0",borderRadius:14,width:"100%",
+            background:"linear-gradient(135deg,rgba(125,211,252,0.22),rgba(165,180,252,0.16))",
+            border:"1px solid rgba(125,211,252,0.32)",color:"#fff",textDecoration:"none",
+            fontSize:15,fontWeight:700,boxShadow:"0 4px 20px rgba(125,211,252,0.15)"}}>
+          <span style={{fontSize:20}}>⬇️</span> Baixar APK
+        </a>
+      </div>
+      <div style={{fontSize:11,color:"rgba(255,255,255,0.22)",textAlign:"center",lineHeight:1.8,maxWidth:260}}>
+        Após baixar, habilite <span style={{color:"rgba(255,255,255,0.38)",fontWeight:600}}>Fontes desconhecidas</span> nas configurações do Android para instalar.
+        <br/><br/>🖥️ Para o site completo, acesse pelo computador.
+      </div>
+    </div>
     {/* Toast global fixo — não some com re-renders de componentes filhos */}
     {toast&&(
       <div style={{position:"fixed",top:16,left:"50%",transform:"translateX(-50%)",zIndex:999999,
