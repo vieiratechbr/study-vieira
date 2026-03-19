@@ -505,7 +505,7 @@ function Av({src,name,size=30,onClick,editable=false}){
 const sbIsAdmin = async (email) => {
   if (!USE_SUPABASE) return false;
   if (email === FOUNDER) return true;
-  const { data } = await sb.from("admins").select("email").eq("email", email).single();
+  const { data } = await sb.from("admins").select("email").eq("email", email).maybeSingle();
   return !!data;
 };
 
@@ -558,32 +558,43 @@ export default function App(){
   useEffect(()=>{
     if(!USE_SUPABASE){setAuthLoading(false);return;}
     const init=async()=>{
-      const{data:{session}}=await sb.auth.getSession();
-      if(session?.user){
-        await _loginFromSession(session.user);
-        // Always re-sync fresh data from Supabase on page load
-        _syncFromSupabase(session.user.id).catch(e=>console.warn('[sync]',e.message));
+      try{
+        const{data:{session}}=await sb.auth.getSession();
+        if(session?.user){
+          await _loginFromSession(session.user);
+          _syncFromSupabase(session.user.id).catch(()=>{});
+        }
+      }catch(e){
+        console.warn('[init]',e?.message);
+      }finally{
+        setAuthLoading(false);
       }
-      setAuthLoading(false);
     };
     init();
+
+    // Guard: evita que onAuthStateChange re-execute _loginFromSession
+    // enquanto init() já está rodando (evita race condition no login)
+    let initDone=false;
+    setTimeout(()=>{initDone=true;},3000);
+
     const{data:{subscription}}=sb.auth.onAuthStateChange(async(event,session)=>{
       if(event==="SIGNED_OUT"){
         setUser(null);
-        // NÃO limpa activeBan aqui — se o signOut foi causado por um ban,
-        // precisamos manter a tela de "conta suspensa" visível.
-        // activeBan só é zerado no logout explícito do usuário (botão Sair).
-      }
-      else if(session?.user){
-        await _loginFromSession(session.user);
-        _syncFromSupabase(session.user.id).catch(()=>{});
+        // NÃO limpa activeBan — sessão de banido precisa manter a tela visível
+      }else if(event==="SIGNED_IN"&&session?.user&&initDone){
+        // Só executa após init() terminar para evitar dupla execução
+        try{
+          await _loginFromSession(session.user);
+          _syncFromSupabase(session.user.id).catch(()=>{});
+        }catch(e){
+          console.warn('[authChange]',e?.message);
+        }
       }
     });
     return()=>subscription.unsubscribe();
   },[]);
 
   // Revalidação periódica do ban no Supabase a cada 5 minutos
-  // Garante que um ban aplicado enquanto o usuário está logado seja detectado
   useEffect(()=>{
     if(!USE_SUPABASE||!user) return;
     const check=async()=>{
@@ -591,47 +602,49 @@ export default function App(){
       setActiveBan(ban);
       if(ban){ await sb.auth.signOut(); }
     };
-    // Primeira checagem imediata
     check();
-    const interval=setInterval(check, 5*60*1000); // a cada 5 min
+    const interval=setInterval(check, 5*60*1000);
     return()=>clearInterval(interval);
   },[user?.id]);
 
   const _loginFromSession=async(sbUser)=>{
-    // VERIFICAÇÃO DE BAN NO SERVIDOR — não pode ser contornada limpando localStorage
-    const ban=await _checkBanSB(sbUser.id);
-    if(ban){
-      setActiveBan(ban);
-      await sb.auth.signOut();
-      setAuthLoading(false);
+    try{
+      // Verificação de ban no servidor
+      const ban=await _checkBanSB(sbUser.id);
+      if(ban){
+        setActiveBan(ban);
+        await sb.auth.signOut();
+        setAuthLoading(false);
+        return null;
+      }
+      setActiveBan(null);
+
+      const{data:prof}=await sb.from("profiles").select("*").eq("id",sbUser.id).maybeSingle();
+      // .maybeSingle() em vez de .single() — não lança erro se não for admin
+      const{data:adm}=await sb.from("admins").select("email").eq("email",sbUser.email).maybeSingle();
+      const isAdm=sbUser.email===FOUNDER||!!adm;
+      const u={id:sbUser.id,name:prof?.name||sbUser.email,email:sbUser.email,isAdm};
+      _currentUserId=u.id;
+      if(!prof){
+        try{await sb.from("profiles").upsert({id:sbUser.id,name:sbUser.user_metadata?.name||sbUser.email.split("@")[0],email:sbUser.email,bio:""});}catch(_){}
+      }
+      const profData=prof||{};
+      _LS.set(K.profile(u.id),{
+        avatar:profData.avatar_url||null,
+        bio:profData.bio||"",
+        banner:profData.banner||null,
+        bannerImg:profData.banner_img||null,
+        gender:profData.gender||"Prefiro não dizer",
+        age:profData.age||"",
+        course:profData.course||""
+      });
+      setUser(u);
+      _syncFromSupabase(u.id).catch(()=>{});
+      return u;
+    }catch(e){
+      console.warn('[loginFromSession]',e?.message);
       return null;
     }
-    setActiveBan(null);
-
-    const{data:prof}=await sb.from("profiles").select("*").eq("id",sbUser.id).maybeSingle();
-    const{data:adm}=await sb.from("admins").select("email").eq("email",sbUser.email).single();
-    const isAdm=sbUser.email===FOUNDER||!!adm;
-    const u={id:sbUser.id,name:prof?.name||sbUser.email,email:sbUser.email,isAdm};
-    _currentUserId=u.id;
-    // Cache profile to localStorage so components work unchanged
-    // Create profile row if missing
-    if(!prof){
-      try{await sb.from("profiles").upsert({id:sbUser.id,name:sbUser.user_metadata?.name||sbUser.email.split("@")[0],email:sbUser.email,bio:""});}catch(_){}
-    }
-    const profData=prof||{};
-    _LS.set(K.profile(u.id),{
-      avatar:profData.avatar_url||null,
-      bio:profData.bio||"",
-      banner:profData.banner||null,
-      bannerImg:profData.banner_img||null,
-      gender:profData.gender||"Prefiro não dizer",
-      age:profData.age||"",
-      course:profData.course||""
-    });
-    setUser(u);
-    // Sync all user data to localStorage cache (async, no await)
-    _syncFromSupabase(u.id).catch(e=>console.warn('[SB sync]',e?.message));
-    return u;
   };
 
   // ── localStorage-only auth ────────────────────────────────────────────────
