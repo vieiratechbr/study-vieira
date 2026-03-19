@@ -2916,7 +2916,7 @@ function ProfileTab({user,setUser,isDonorTheme=false,setIsDonorTheme=()=>{}}){
             <input ref={bannerFileRef} type="file" accept="image/*" style={{display:"none"}}
               onClick={e=>e.target.value=""} onChange={handleBannerFile}/>
             <button className="btn btn-g btn-sm" style={{fontSize:11,background:"rgba(0,0,0,0.5)",backdropFilter:"blur(8px)"}}
-              onClick={()=>bannerFileRef.current?.click()}>🖼 Foto</button>
+              onClick={()=>{if(bannerFileRef.current){bannerFileRef.current.value="";bannerFileRef.current.click();}}}>🖼 Foto</button>
             <div style={{display:"flex",gap:4}}>
               {BANNER_PRESETS.map((b,i)=>(
                 <div key={i} onClick={()=>{setBanner(b);setBannerImg(null);}}
@@ -2931,9 +2931,11 @@ function ProfileTab({user,setUser,isDonorTheme=false,setIsDonorTheme=()=>{}}){
       <div style={{position:"relative",paddingTop:50}}>
         <div style={{position:"absolute",top:-44,left:20,zIndex:10}}>
           <input ref={avatarFileRef} type="file" accept="image/*" style={{display:"none"}}
-            onClick={e=>e.target.value=""} onChange={handleAvatarFile}/>
+            onChange={handleAvatarFile}/>
           {editing
-            ?<div className="av-upload" onClick={()=>avatarFileRef.current?.click()}>
+            ?<div className="av-upload" onClick={()=>{
+                if(avatarFileRef.current){avatarFileRef.current.value="";avatarFileRef.current.click();}
+              }}>
                 <div style={{width:84,height:84,borderRadius:"50%",overflow:"hidden",border:"4px solid var(--bg)",boxShadow:"0 2px 12px rgba(0,0,0,0.4)"}}>
                   {avatar
                     ?<img src={avatar} style={{width:"100%",height:"100%",objectFit:"cover",display:"block"}} alt=""/>
