@@ -443,6 +443,18 @@ const CSS_LIGHT = `
   --mesh1:rgba(180,180,200,0.22); --mesh2:rgba(160,160,190,0.18); --mesh3:rgba(140,140,170,0.14);
   --shine:rgba(255,255,255,0.80); --spec:rgba(255,255,255,0.50);
 `;
+// Tema exclusivo para apoiadores — tons dourados/âmbar quentes
+const CSS_DONOR = `
+  --bg:#17120a; --bg2:#211a0e;
+  --s:rgba(120,85,30,0.50); --s2:rgba(100,70,20,0.30);
+  --b:rgba(252,211,77,0.18); --b2:rgba(252,211,77,0.09);
+  --t:rgba(255,245,220,0.92); --t2:rgba(255,225,160,0.55); --t3:rgba(255,200,100,0.28);
+  --nav-bg:rgba(23,18,10,0.88); --nav-border:rgba(252,211,77,0.12);
+  --inp-bg:rgba(252,211,77,0.06); --inp-focus:rgba(252,211,77,0.10);
+  --card-bg:rgba(252,211,77,0.04); --card-hover:rgba(252,211,77,0.08);
+  --mesh1:rgba(180,120,30,0.20); --mesh2:rgba(200,140,40,0.14); --mesh3:rgba(160,100,20,0.10);
+  --shine:rgba(252,211,77,0.25); --spec:rgba(252,211,77,0.14);
+`;
 
 
 // ── Glass Card ────────────────────────────────────────────────────────────────
@@ -529,15 +541,24 @@ export default function App(){
   const [viewUser,setViewUser]=useState(null);
   const [dark,setDark]=useState(()=>DB.get("sv5_theme")!=="light");
   const [authLoading,setAuthLoading]=useState(USE_SUPABASE);
-  // Estado do ban vindo do Supabase — não pode ser forjado limpando localStorage
   const [activeBan,setActiveBan]=useState(null);
+  // Controla tema dourado para apoiadores
+  const [isDonorTheme,setIsDonorTheme]=useState(()=>DB.get("sv5_donor_theme")===true);
 
   useEffect(()=>{
-    document.documentElement.style.cssText=dark?CSS_DARK:CSS_LIGHT;
-    DB.set("sv5_theme",dark?"dark":"light");
-  },[dark]);
+    // Tema dourado tem prioridade quando ativo
+    if(isDonorTheme){
+      document.documentElement.style.cssText=CSS_DONOR;
+    }else{
+      document.documentElement.style.cssText=dark?CSS_DARK:CSS_LIGHT;
+      DB.set("sv5_theme",dark?"dark":"light");
+    }
+  },[dark,isDonorTheme]);
 
-  const toggleTheme=()=>{SFX.toggle(!dark);setDark(d=>!d);};
+  const toggleTheme=()=>{
+    if(isDonorTheme){setIsDonorTheme(false);DB.set("sv5_donor_theme",false);}
+    else{SFX.toggle(!dark);setDark(d=>!d);}
+  };
 
   // Verifica ban diretamente no Supabase — retorna o objeto ban ou null
   const _checkBanSB=async(userId)=>{
@@ -718,10 +739,10 @@ export default function App(){
           {tab==="materias"  &&<div key="m" className="page-enter"><SubjectsTab   user={user}/></div>}
           {tab==="agenda"    &&<div key="a" className="page-enter"><AgendaTab     user={user}/></div>}
           {tab==="comunidade"&&<div key="c" className="page-enter"><CommunityTab  user={user} viewUser={viewUser} setViewUser={setViewUser}/></div>}
-          {tab==="perfil"    &&<div key="p" className="page-enter"><ProfileTab    user={user} setUser={(u)=>{DB.set(K.session,u);setUser(u);}}/></div>}
+          {tab==="perfil"    &&<div key="p" className="page-enter"><ProfileTab    user={user} setUser={(u)=>{DB.set(K.session,u);setUser(u);}} isDonorTheme={isDonorTheme} setIsDonorTheme={(v)=>{setIsDonorTheme(v);DB.set("sv5_donor_theme",v);}}/></div>}
           {tab==="admin"     &&<div key="ad" className="page-enter"><AdminTab      user={user} refreshUser={refreshUser}/></div>}
           {tab==="feedback"  &&<div key="fb" className="page-enter"><FeedbackTab   user={user}/></div>}
-          {tab==="apoio"     &&<div key="ap" className="page-enter"><SupportTab user={user}/></div>}
+          {tab==="apoio"     &&<div key="ap" className="page-enter"><SupportTab user={user} isDonorTheme={isDonorTheme} setIsDonorTheme={(v)=>{setIsDonorTheme(v);DB.set("sv5_donor_theme",v);}}/></div>}
         </div>
       </>}
       {/* Mobile bottom navigation */}
@@ -2091,12 +2112,88 @@ function AllCommsTab({user}){
   const [type,setType]=useState("Todas");
   const types=["Todas",...COMM_TYPES];
   const filtered=type==="Todas"?comms:comms.filter(c=>c.type===type);
+
+  // Criação de comunidade para apoiadores
+  const [donorOk,setDonorOk]=useState(false);
+  const [modal,setModal]=useState(false);
+  const [name,setName]=useState("");const [ctype,setCtype]=useState("Escola");
+  const [desc,setDesc]=useState("");const [icon,setIcon]=useState("🏫");const [err,setErr]=useState("");
+
+  useEffect(()=>{
+    if(!USE_SUPABASE||!sb) return;
+    sb.from("donors").select("status,expires_at").eq("user_id",user.id).eq("status","confirmed").maybeSingle()
+      .then(({data})=>{
+        const ok=!!data&&(!data.expires_at||new Date(data.expires_at)>new Date());
+        setDonorOk(ok);
+      }).catch(()=>{});
+  },[user.id]);
+
+  const submitComm=async()=>{
+    if(!name.trim()){setErr("Digite o nome.");return;}
+    const newComm={id:uid(),name:name.trim(),type:ctype,desc,icon,createdBy:user.id,createdAt:Date.now()};
+    const existing=getCommunities();
+    DB.set(K.communities,[...existing,newComm]);
+    if(USE_SUPABASE&&sb){
+      try{
+        await sb.from("communities").insert({name:newComm.name,type:newComm.type,description:newComm.desc||null,icon:newComm.icon,created_by:user.id});
+        await logAdmin(user.email,user.name,"create_community_donor",newComm.name,newComm.type);
+      }catch(e){console.warn("[comm]",e.message);}
+    }
+    SFX.save();setModal(false);setName("");setDesc("");setErr("");
+  };
+
   return(<div>
-    <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:16}}>
-      {types.map(t=><button key={t} className={`btn btn-sm ${type===t?"btn-f":"btn-g"}`} onClick={()=>setType(t)}>{t}</button>)}
+    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16,flexWrap:"wrap",gap:8}}>
+      <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+        {types.map(t=><button key={t} className={`btn btn-sm ${type===t?"btn-f":"btn-g"}`} onClick={()=>setType(t)}>{t}</button>)}
+      </div>
+      {/* Botão de criar comunidade — apenas para apoiadores confirmados */}
+      {donorOk&&(
+        <button className="btn btn-sm" style={{background:"linear-gradient(135deg,rgba(252,211,77,0.18),rgba(251,146,60,0.12))",
+          color:"#fcd34d",border:"1px solid rgba(252,211,77,0.28)",fontWeight:600}}
+          onClick={()=>setModal(true)}>
+          ☕ + Criar comunidade
+        </button>
+      )}
     </div>
+
     {filtered.length===0?<G><div className="empty"><div style={{fontSize:36,marginBottom:10}}>🔍</div><p>Nenhuma comunidade encontrada</p></div></G>
       :<div className="g3">{filtered.map(c=><CommCard key={c.id} comm={c} user={user}/>)}</div>}
+
+    {modal&&(
+      <Modal onClose={()=>setModal(false)}>
+        <G cls="mp si" onClick={e=>e.stopPropagation()}>
+          <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:18}}>
+            <h3 style={{fontSize:16,margin:0}}>Nova Comunidade</h3>
+            <div style={{padding:"2px 8px",borderRadius:20,background:"rgba(252,211,77,0.12)",
+              border:"1px solid rgba(252,211,77,0.25)",color:"#fcd34d",fontSize:10,fontWeight:700}}>☕ APOIADOR</div>
+          </div>
+          {err&&<div className="er">{err}</div>}
+          <div className="fg"><label>Nome</label>
+            <input className="inp" placeholder="ex: ETEC Vila Guilherme" value={name} onChange={e=>setName(e.target.value)}/></div>
+          <div className="fr">
+            <div className="fg" style={{marginBottom:0}}><label>Tipo</label>
+              <select className="inp" value={ctype} onChange={e=>setCtype(e.target.value)}>
+                {COMM_TYPES.map(t=><option key={t}>{t}</option>)}
+              </select>
+            </div>
+            <div className="fg" style={{marginBottom:0}}><label>Ícone</label>
+              <div style={{display:"flex",gap:6,flexWrap:"wrap",padding:"6px 0"}}>
+                {COMM_ICONS.map(i=><div key={i} onClick={()=>setIcon(i)}
+                  style={{fontSize:20,cursor:"pointer",padding:4,borderRadius:6,
+                    background:icon===i?"rgba(255,255,255,0.15)":"transparent",transition:"all .15s"}}>{i}</div>)}
+              </div>
+            </div>
+          </div>
+          <div className="fg" style={{marginBottom:20,marginTop:8}}><label>Descrição (opcional)</label>
+            <input className="inp" placeholder="Breve descrição" value={desc} onChange={e=>setDesc(e.target.value)}/></div>
+          <div style={{display:"flex",gap:8}}>
+            <button className="btn btn-f" style={{flex:1}} onClick={submitComm}>Criar</button>
+            <button className="btn btn-g" onClick={()=>setModal(false)}>Cancelar</button>
+          </div>
+        </G>
+      </Modal>
+    )}
   </div>);
 }
 
@@ -2325,13 +2422,24 @@ function AvatarCropper({src,onDone,onCancel}){
   const canvasRef=useRef(null);
   const [offset,setOffset]=useState({x:0,y:0});
   const [scale,setScale]=useState(1);
+  const [minScale,setMinScale]=useState(0.1);
   const [dragging,setDragging]=useState(false);
   const [start,setStart]=useState({x:0,y:0});
   const imgRef=useRef(null);
   const SIZE=260;
 
   useEffect(()=>{
-    const img=new Image();img.onload=()=>{imgRef.current=img;draw();};img.src=src;
+    const img=new Image();
+    img.onload=()=>{
+      imgRef.current=img;
+      // Calcula o scale mínimo para que a imagem caiba inteira no canvas (zoom = 1x natural)
+      const fitScale=Math.min(SIZE/img.width, SIZE/img.height);
+      setMinScale(fitScale);
+      setScale(fitScale); // começa mostrando a foto inteira sem zoom
+      setOffset({x:0,y:0});
+      draw();
+    };
+    img.src=src;
   },[src]);
 
   const draw=()=>{
@@ -2376,9 +2484,83 @@ function AvatarCropper({src,onDone,onCancel}){
         onMouseDown={onMouseDown} onMouseMove={onMouseMove} onMouseUp={onMouseUp} onMouseLeave={onMouseUp}
         onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onMouseUp}/>
     </div>
-    <input type="range" min={0.5} max={3} step={0.05} value={scale}
-      onChange={e=>{setScale(parseFloat(e.target.value));}}
-      style={{width:220,marginBottom:14,accentColor:"#7dd3fc"}}/>
+    <div style={{display:"flex",alignItems:"center",gap:8,justifyContent:"center",marginBottom:14}}>
+      <span style={{fontSize:11,color:"var(--t3)"}}>−</span>
+      <input type="range" min={minScale} max={Math.max(minScale*4,3)} step={0.01} value={scale}
+        onChange={e=>setScale(parseFloat(e.target.value))}
+        style={{width:200,accentColor:"#7dd3fc"}}/>
+      <span style={{fontSize:11,color:"var(--t3)"}}>+</span>
+    </div>
+    <div style={{display:"flex",gap:8,justifyContent:"center"}}>
+      <button className="btn btn-f btn-sm" onClick={confirm}>✓ Confirmar</button>
+      <button className="btn btn-g btn-sm" onClick={onCancel}>Cancelar</button>
+    </div>
+  </div>);
+}
+
+// ── Banner crop helper ──────────────────────────────────────────
+function BannerCropper({src,onDone,onCancel}){
+  const canvasRef=useRef(null);
+  const [offset,setOffset]=useState({x:0,y:0});
+  const [scale,setScale]=useState(1);
+  const [minScale,setMinScale]=useState(0.1);
+  const [dragging,setDragging]=useState(false);
+  const [start,setStart]=useState({x:0,y:0});
+  const imgRef=useRef(null);
+  const W=520,H=146;
+
+  useEffect(()=>{
+    const img=new Image();
+    img.onload=()=>{
+      imgRef.current=img;
+      const fitScale=Math.min(W/img.width,H/img.height);
+      setMinScale(fitScale);
+      setScale(fitScale);
+      setOffset({x:0,y:0});
+    };
+    img.src=src;
+  },[src]);
+
+  useEffect(()=>{draw();},[offset,scale]);
+
+  const draw=()=>{
+    const canvas=canvasRef.current;if(!canvas||!imgRef.current)return;
+    const ctx=canvas.getContext("2d");
+    ctx.clearRect(0,0,W,H);
+    const img=imgRef.current;
+    const w=img.width*scale,h=img.height*scale;
+    ctx.drawImage(img,W/2-w/2+offset.x,H/2-h/2+offset.y,w,h);
+  };
+
+  const onMouseDown=(e)=>{setDragging(true);setStart({x:e.clientX-offset.x,y:e.clientY-offset.y});};
+  const onMouseMove=(e)=>{if(!dragging)return;setOffset({x:e.clientX-start.x,y:e.clientY-start.y});};
+  const onMouseUp=()=>setDragging(false);
+  const onTouchStart=(e)=>{const t=e.touches[0];setDragging(true);setStart({x:t.clientX-offset.x,y:t.clientY-offset.y});};
+  const onTouchMove=(e)=>{if(!dragging)return;const t=e.touches[0];setOffset({x:t.clientX-start.x,y:t.clientY-start.y});};
+
+  const confirm=()=>{
+    const canvas=canvasRef.current;
+    const out=document.createElement("canvas");out.width=1400;out.height=400;
+    out.getContext("2d").drawImage(canvas,0,0,W,H,0,0,1400,400);
+    onDone(out.toDataURL("image/jpeg",0.88));
+  };
+
+  return(<div style={{textAlign:"center"}}>
+    <p style={{fontSize:12,color:"var(--t2)",marginBottom:10}}>Arraste para reposicionar · Slider para zoom</p>
+    <div style={{display:"flex",justifyContent:"center",marginBottom:10}}>
+      <canvas ref={canvasRef} width={W} height={H}
+        style={{borderRadius:10,cursor:dragging?"grabbing":"grab",touchAction:"none",
+          maxWidth:"100%",boxShadow:"0 0 0 2px rgba(255,255,255,0.15)"}}
+        onMouseDown={onMouseDown} onMouseMove={onMouseMove} onMouseUp={onMouseUp} onMouseLeave={onMouseUp}
+        onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onMouseUp}/>
+    </div>
+    <div style={{display:"flex",alignItems:"center",gap:8,justifyContent:"center",marginBottom:14}}>
+      <span style={{fontSize:11,color:"var(--t3)"}}>−</span>
+      <input type="range" min={minScale} max={Math.max(minScale*5,2)} step={0.01} value={scale}
+        onChange={e=>setScale(parseFloat(e.target.value))}
+        style={{width:200,accentColor:"#7dd3fc"}}/>
+      <span style={{fontSize:11,color:"var(--t3)"}}>+</span>
+    </div>
     <div style={{display:"flex",gap:8,justifyContent:"center"}}>
       <button className="btn btn-f btn-sm" onClick={confirm}>✓ Confirmar</button>
       <button className="btn btn-g btn-sm" onClick={onCancel}>Cancelar</button>
@@ -2583,13 +2765,14 @@ function ActivityFeed({userId}){
   ))}</div>);
 }
 
-function ProfileTab({user,setUser}){
+function ProfileTab({user,setUser,isDonorTheme=false,setIsDonorTheme=()=>{}}){
   const [prof,setProf]=useState(()=>getProfile(user.id));
   const [editing,setEditing]=useState(false);
   const [name,setName]=useState(user.name);
   const [bio,setBio]=useState(prof.bio||"");
   const [avatar,setAvatar]=useState(prof.avatar||"");
   const [cropSrc,setCropSrc]=useState(null);
+  const [bannerCropSrc,setBannerCropSrc]=useState(null);
   const [banner,setBanner]=useState(prof.banner||BANNER_PRESETS[user.id.charCodeAt(0)%BANNER_PRESETS.length]);
   const [bannerImg,setBannerImg]=useState(prof.bannerImg||null);
   const [gender,setGender]=useState(prof.gender||"Prefiro não dizer");
@@ -2642,8 +2825,8 @@ function ProfileTab({user,setUser}){
   };
   const handleBannerFile=async(e)=>{
     const file=e.target.files[0];if(!file)return;
-    const compressed=await compressImage(file,1400,0.82);
-    setBannerImg(compressed);setBanner(null);
+    const compressed=await compressImage(file,1400,0.88);
+    setBannerCropSrc(compressed); // abre o cropper de banner
   };
 
   const save=async()=>{
@@ -2684,11 +2867,20 @@ function ProfileTab({user,setUser}){
   const bannerStyle=bannerImg?{backgroundImage:`url(${bannerImg})`,backgroundSize:"cover",backgroundPosition:"center"}:{background:banner||BANNER_PRESETS[0]};
 
   return(<div className="fu">
-    {/* Crop modal */}
+    {/* Crop de avatar */}
     {cropSrc&&(
       <Modal onClose={()=>setCropSrc(null)}><G cls="mp si" style={{maxWidth:340}}>
         <h3 style={{marginBottom:14,fontSize:16,textAlign:"center"}}>✂️ Recortar foto</h3>
         <AvatarCropper src={cropSrc} onDone={(cropped)=>{setAvatar(cropped);setCropSrc(null);}} onCancel={()=>setCropSrc(null)}/>
+      </G></Modal>)}
+
+    {/* Crop de banner */}
+    {bannerCropSrc&&(
+      <Modal onClose={()=>setBannerCropSrc(null)}><G cls="mp si" style={{maxWidth:600}}>
+        <h3 style={{marginBottom:14,fontSize:16,textAlign:"center"}}>✂️ Recortar banner</h3>
+        <BannerCropper src={bannerCropSrc}
+          onDone={(cropped)=>{setBannerImg(cropped);setBanner(null);setBannerCropSrc(null);}}
+          onCancel={()=>setBannerCropSrc(null)}/>
       </G></Modal>)}
 
     <G style={{padding:0,overflow:"hidden",marginBottom:16}}>
@@ -2785,6 +2977,37 @@ function ProfileTab({user,setUser}){
             )}
           </div>
           {prof.bio&&<div style={{fontSize:13,color:"var(--t2)",marginTop:8,lineHeight:1.5}}>{prof.bio}</div>}
+          {/* Benefícios exclusivos do apoiador */}
+          {donorStatus?.status==="confirmed"&&(
+            <div style={{marginTop:14,padding:"12px 14px",borderRadius:12,
+              background:"linear-gradient(135deg,rgba(252,211,77,0.08),rgba(251,146,60,0.06))",
+              border:"1px solid rgba(252,211,77,0.20)"}}>
+              <div style={{fontSize:12,fontWeight:600,color:"#fcd34d",marginBottom:10,textTransform:"uppercase",letterSpacing:.4}}>
+                ☕ Benefícios do apoiador
+              </div>
+              {/* Tema exclusivo */}
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
+                <div>
+                  <div style={{fontSize:13,fontWeight:500,color:"var(--t)"}}>🎨 Tema dourado exclusivo</div>
+                  <div style={{fontSize:11,color:"var(--t2)",marginTop:2}}>Visual especial disponível só para apoiadores</div>
+                </div>
+                <button onClick={()=>setIsDonorTheme(!isDonorTheme)}
+                  style={{padding:"5px 12px",borderRadius:20,border:"none",cursor:"pointer",fontFamily:"inherit",
+                    fontSize:12,fontWeight:600,
+                    background:isDonorTheme?"linear-gradient(135deg,rgba(252,211,77,0.30),rgba(251,146,60,0.22))":"rgba(255,255,255,0.08)",
+                    color:isDonorTheme?"#fcd34d":"var(--t2)",
+                    boxShadow:isDonorTheme?"0 0 10px rgba(252,211,77,0.25)":"none",
+                    transition:"all .2s"}}>
+                  {isDonorTheme?"✓ Ativo":"Ativar"}
+                </button>
+              </div>
+              {donorStatus.expires_at&&(
+                <div style={{fontSize:11,color:"var(--t3)",borderTop:"1px solid rgba(252,211,77,0.12)",paddingTop:8,marginTop:4}}>
+                  Válido até {new Date(donorStatus.expires_at).toLocaleDateString("pt-BR",{day:"2-digit",month:"long",year:"numeric"})}
+                </div>
+              )}
+            </div>
+          )}
         </>)}
         </div>{/* /padding */}
       </div>{/* /relative */}
@@ -3881,7 +4104,7 @@ function AdminDonors({user:adminUser}){
   </div>);
 }
 
-function SupportTab({user}){
+function SupportTab({user,isDonorTheme=false,setIsDonorTheme=()=>{}}){
   const BMC_USER = "vieiratechbr";
   const [donorStatus,setDonorStatus]=useState(null);
   const [showDonorModal,setShowDonorModal]=useState(false);
@@ -3949,12 +4172,43 @@ function SupportTab({user}){
             border:"1px solid rgba(252,211,77,0.28)",borderRadius:14,padding:20}}>
             <div style={{fontSize:28,marginBottom:8}}>☕</div>
             <div style={{fontSize:15,fontWeight:700,color:"#fcd34d",marginBottom:6}}>Você é um Apoiador!</div>
-            <div style={{fontSize:13,color:"var(--t2)",lineHeight:1.6}}>
-              Obrigado pelo apoio. Seu badge aparece no seu perfil.
+            <div style={{fontSize:13,color:"var(--t2)",lineHeight:1.6,marginBottom:16}}>
+              Obrigado pelo apoio. Confira seus benefícios exclusivos:
             </div>
+
+            {/* Benefício 1: tema dourado */}
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",
+              padding:"10px 12px",borderRadius:10,background:"rgba(0,0,0,0.15)",marginBottom:8}}>
+              <div>
+                <div style={{fontSize:13,fontWeight:600,color:"var(--t)"}}>🎨 Tema dourado exclusivo</div>
+                <div style={{fontSize:11,color:"var(--t2)",marginTop:2}}>Visual âmbar disponível só para você</div>
+              </div>
+              <button onClick={()=>setIsDonorTheme(!isDonorTheme)}
+                style={{padding:"5px 14px",borderRadius:20,border:"none",cursor:"pointer",fontFamily:"inherit",
+                  fontSize:12,fontWeight:700,
+                  background:isDonorTheme?"linear-gradient(135deg,rgba(252,211,77,0.35),rgba(251,146,60,0.25))":"rgba(255,255,255,0.10)",
+                  color:isDonorTheme?"#fcd34d":"var(--t2)",
+                  boxShadow:isDonorTheme?"0 0 12px rgba(252,211,77,0.30)":"none",
+                  transition:"all .2s"}}>
+                {isDonorTheme?"✓ Ativo":"Ativar"}
+              </button>
+            </div>
+
+            {/* Benefício 2: criar comunidade */}
+            <div style={{padding:"10px 12px",borderRadius:10,background:"rgba(0,0,0,0.15)",marginBottom:8}}>
+              <div style={{fontSize:13,fontWeight:600,color:"var(--t)"}}>🏫 Criar comunidades</div>
+              <div style={{fontSize:11,color:"var(--t2)",marginTop:2}}>Acesse Comunidade → Explorar para criar a sua</div>
+            </div>
+
+            {/* Benefício 3: badge */}
+            <div style={{padding:"10px 12px",borderRadius:10,background:"rgba(0,0,0,0.15)"}}>
+              <div style={{fontSize:13,fontWeight:600,color:"var(--t)"}}>☕ Badge no perfil</div>
+              <div style={{fontSize:11,color:"var(--t2)",marginTop:2}}>Visível para todos no seu perfil e ao buscar usuários</div>
+            </div>
+
             {donorStatus.expires_at&&(
-              <div style={{fontSize:11,color:"var(--t3)",marginTop:8}}>
-                Válido até {new Date(donorStatus.expires_at).toLocaleDateString("pt-BR",{day:"2-digit",month:"long",year:"numeric"})}
+              <div style={{fontSize:11,color:"var(--t3)",marginTop:12,borderTop:"1px solid rgba(252,211,77,0.12)",paddingTop:10}}>
+                Benefícios válidos até {new Date(donorStatus.expires_at).toLocaleDateString("pt-BR",{day:"2-digit",month:"long",year:"numeric"})}
               </div>
             )}
           </div>
