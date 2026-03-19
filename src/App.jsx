@@ -2426,39 +2426,39 @@ function AvatarCropper({src,onDone,onCancel}){
   const [dragging,setDragging]=useState(false);
   const [start,setStart]=useState({x:0,y:0});
   const imgRef=useRef(null);
+  const rafRef=useRef(null);
   const SIZE=260;
 
   useEffect(()=>{
     const img=new Image();
     img.onload=()=>{
       imgRef.current=img;
-      // Calcula o scale mínimo para que a imagem caiba inteira no canvas (zoom = 1x natural)
       const fitScale=Math.min(SIZE/img.width, SIZE/img.height);
       setMinScale(fitScale);
-      setScale(fitScale); // começa mostrando a foto inteira sem zoom
+      setScale(fitScale);
       setOffset({x:0,y:0});
-      draw();
     };
     img.src=src;
   },[src]);
 
-  const draw=()=>{
+  const draw=useCallback(()=>{
     const canvas=canvasRef.current;if(!canvas||!imgRef.current)return;
     const ctx=canvas.getContext("2d");
     ctx.clearRect(0,0,SIZE,SIZE);
-    // clip circle
     ctx.save();ctx.beginPath();ctx.arc(SIZE/2,SIZE/2,SIZE/2,0,Math.PI*2);ctx.clip();
     const img=imgRef.current;
-    const s=scale;
-    const w=img.width*s,h=img.height*s;
+    const w=img.width*scale,h=img.height*scale;
     ctx.drawImage(img,SIZE/2-w/2+offset.x,SIZE/2-h/2+offset.y,w,h);
     ctx.restore();
-    // circle border
     ctx.beginPath();ctx.arc(SIZE/2,SIZE/2,SIZE/2-1,0,Math.PI*2);
     ctx.strokeStyle="rgba(255,255,255,0.4)";ctx.lineWidth=2;ctx.stroke();
-  };
+  },[offset,scale]);
 
-  useEffect(()=>{draw();},[offset,scale]);
+  useEffect(()=>{
+    if(rafRef.current) cancelAnimationFrame(rafRef.current);
+    rafRef.current=requestAnimationFrame(draw);
+    return()=>{if(rafRef.current) cancelAnimationFrame(rafRef.current);};
+  },[draw]);
 
   const onMouseDown=(e)=>{setDragging(true);setStart({x:e.clientX-offset.x,y:e.clientY-offset.y});};
   const onMouseMove=(e)=>{if(!dragging)return;setOffset({x:e.clientX-start.x,y:e.clientY-start.y});};
@@ -2507,6 +2507,7 @@ function BannerCropper({src,onDone,onCancel}){
   const [dragging,setDragging]=useState(false);
   const [start,setStart]=useState({x:0,y:0});
   const imgRef=useRef(null);
+  const rafRef=useRef(null);
   const W=520,H=146;
 
   useEffect(()=>{
@@ -2521,16 +2522,20 @@ function BannerCropper({src,onDone,onCancel}){
     img.src=src;
   },[src]);
 
-  useEffect(()=>{draw();},[offset,scale]);
-
-  const draw=()=>{
+  const draw=useCallback(()=>{
     const canvas=canvasRef.current;if(!canvas||!imgRef.current)return;
     const ctx=canvas.getContext("2d");
     ctx.clearRect(0,0,W,H);
     const img=imgRef.current;
     const w=img.width*scale,h=img.height*scale;
     ctx.drawImage(img,W/2-w/2+offset.x,H/2-h/2+offset.y,w,h);
-  };
+  },[offset,scale]);
+
+  useEffect(()=>{
+    if(rafRef.current) cancelAnimationFrame(rafRef.current);
+    rafRef.current=requestAnimationFrame(draw);
+    return()=>{if(rafRef.current) cancelAnimationFrame(rafRef.current);};
+  },[draw]);
 
   const onMouseDown=(e)=>{setDragging(true);setStart({x:e.clientX-offset.x,y:e.clientY-offset.y});};
   const onMouseMove=(e)=>{if(!dragging)return;setOffset({x:e.clientX-start.x,y:e.clientY-start.y});};
@@ -2539,10 +2544,11 @@ function BannerCropper({src,onDone,onCancel}){
   const onTouchMove=(e)=>{if(!dragging)return;const t=e.touches[0];setOffset({x:t.clientX-start.x,y:t.clientY-start.y});};
 
   const confirm=()=>{
+    // Exporta em 800x224 (suficiente para o banner, ~30KB — evita payload gigante no Supabase)
     const canvas=canvasRef.current;
-    const out=document.createElement("canvas");out.width=1400;out.height=400;
-    out.getContext("2d").drawImage(canvas,0,0,W,H,0,0,1400,400);
-    onDone(out.toDataURL("image/jpeg",0.88));
+    const out=document.createElement("canvas");out.width=800;out.height=224;
+    out.getContext("2d").drawImage(canvas,0,0,W,H,0,0,800,224);
+    onDone(out.toDataURL("image/jpeg",0.85));
   };
 
   return(<div style={{textAlign:"center"}}>
@@ -2567,6 +2573,7 @@ function BannerCropper({src,onDone,onCancel}){
     </div>
   </div>);
 }
+
 
 const BANNER_PRESETS=[
   "linear-gradient(135deg,#374151,#1f2937)",
@@ -2835,11 +2842,11 @@ function ProfileTab({user,setUser,isDonorTheme=false,setIsDonorTheme=()=>{}}){
     const users=DB.get(K.users)||{};
     if(users[user.email])DB.set(K.users,{...users,[user.email]:{...users[user.email],name:name.trim()}});
     const nu={...user,name:name.trim()};setUser(nu);
-    // Sync to Supabase — avatar base64 pode ser grande, trunca se necessário
+
     if(USE_SUPABASE){
-      // Avatar: se for base64 muito grande (>500KB), sobe via Storage
+      // Sobe avatar para Storage se for base64 (evita payload gigante no DB)
       let avatarUrl=avatar||null;
-      if(avatar&&avatar.startsWith("data:")&&avatar.length>500000){
+      if(avatar&&avatar.startsWith("data:")){
         try{
           const res=await fetch(avatar);const blob=await res.blob();
           const path=`avatars/${user.id}.jpg`;
@@ -2847,6 +2854,18 @@ function ProfileTab({user,setUser,isDonorTheme=false,setIsDonorTheme=()=>{}}){
           if(!upErr){const{data:pub}=sb.storage.from("avatars").getPublicUrl(path);avatarUrl=pub.publicUrl;}
         }catch(e){console.warn("[SB] avatar upload",e.message);}
       }
+
+      // Sobe banner para Storage se for base64
+      let bannerImgUrl=bannerImg||null;
+      if(bannerImg&&bannerImg.startsWith("data:")){
+        try{
+          const res=await fetch(bannerImg);const blob=await res.blob();
+          const path=`banners/${user.id}.jpg`;
+          const{error:upErr}=await sb.storage.from("avatars").upload(path,blob,{upsert:true,contentType:"image/jpeg"});
+          if(!upErr){const{data:pub}=sb.storage.from("avatars").getPublicUrl(path);bannerImgUrl=pub.publicUrl;}
+        }catch(e){console.warn("[SB] banner upload",e.message);}
+      }
+
       const{error}=await sb.from("profiles").upsert({
         id:user.id,
         name:name.trim(),
@@ -2854,12 +2873,17 @@ function ProfileTab({user,setUser,isDonorTheme=false,setIsDonorTheme=()=>{}}){
         bio:bio||null,
         avatar_url:avatarUrl,
         banner:bannerImg?null:(banner||null),
-        banner_img:bannerImg||null,
+        banner_img:bannerImgUrl,
         gender:gender||null,
         age:age?String(age):null,
         course:course||null
       });
       if(error){console.error("[SB] profile save error:",error.message);setOk("Erro ao salvar: "+error.message);return;}
+
+      // Atualiza estado local com URLs do Storage (não base64)
+      const freshProf={...np,avatar:avatarUrl,bannerImg:bannerImgUrl};
+      saveProfile(user.id,freshProf);setProf(freshProf);
+      setAvatar(avatarUrl||"");setBannerImg(bannerImgUrl);
     }
     setEditing(false);setOk("Perfil atualizado!");setTimeout(()=>setOk(""),2500);
   };
