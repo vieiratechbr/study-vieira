@@ -1,6 +1,17 @@
 @import url('https://fonts.googleapis.com/css2?family=Figtree:wght@300;400;500;600;700&display=swap');
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
-:root{--r:20px;--blur:32px;}
+:root{
+  --r:20px;--blur:32px;
+  --bg:#1c1c1e;--bg2:#2c2c2e;
+  --s:rgba(72,72,74,0.55);--s2:rgba(72,72,74,0.28);
+  --b:rgba(255,255,255,0.13);--b2:rgba(255,255,255,0.07);
+  --t:rgba(255,255,255,0.92);--t2:rgba(255,255,255,0.52);--t3:rgba(255,255,255,0.26);
+  --nav-bg:rgba(28,28,30,0.82);--nav-border:rgba(255,255,255,0.06);
+  --inp-bg:rgba(255,255,255,0.06);--inp-focus:rgba(255,255,255,0.09);
+  --card-bg:rgba(255,255,255,0.04);--card-hover:rgba(255,255,255,0.07);
+  --mesh1:rgba(100,100,115,0.16);--mesh2:rgba(80,80,105,0.13);--mesh3:rgba(55,55,70,0.10);
+  --shine:rgba(255,255,255,0.18);--spec:rgba(255,255,255,0.12);
+}
 html,body{height:100%;}#root{min-height:100%;}
 body{font-family:'Figtree',-apple-system,sans-serif;background:var(--bg);min-height:100vh;color:var(--t);overflow-x:hidden;overflow-y:auto;transition:background .3s,color .3s;}
 .mesh{position:fixed;inset:0;z-index:0;pointer-events:none;transition:background .4s;
