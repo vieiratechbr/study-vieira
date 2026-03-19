@@ -2886,7 +2886,7 @@ function ProfileTab({user,setUser,isDonorTheme=false,setIsDonorTheme=()=>{}}){
         gender:gender||null,
         age:age?String(age):null,
         course:course||null
-      });
+      },{onConflict:"id"});
 
       if(error){
         console.error("[SB] profile save error:",error.message);
