@@ -719,7 +719,7 @@ export default function App(){
           <div style={{fontSize:13,color:"rgba(255,255,255,0.48)",lineHeight:1.8,marginBottom:20}}>
             Baixe gratuitamente e acesse suas matérias, agenda e avisos pelo celular.
           </div>
-          <a href="https://studyvieira.com/app/study-vieira.apk" download
+          <a href="https://expo.dev/artifacts/eas/c8TNCwBuqxSJUwfY1GnNfC.apk" download
             style={{display:"flex",alignItems:"center",justifyContent:"center",gap:10,
               padding:"13px 0",borderRadius:14,width:"100%",
               background:"linear-gradient(135deg,rgba(125,211,252,0.22),rgba(165,180,252,0.16))",
