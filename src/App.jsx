@@ -2837,32 +2837,41 @@ function ProfileTab({user,setUser,isDonorTheme=false,setIsDonorTheme=()=>{}}){
   };
 
   const save=async()=>{
+    setOk(""); // limpa msg anterior
     const np={...prof,bio,avatar,banner:bannerImg?null:banner,bannerImg,gender,age,course};
     saveProfile(user.id,np);setProf(np);
     const users=DB.get(K.users)||{};
     if(users[user.email])DB.set(K.users,{...users,[user.email]:{...users[user.email],name:name.trim()}});
     const nu={...user,name:name.trim()};setUser(nu);
+    setEditing(false); // fecha edição imediatamente — confirmação aparece na view
 
     if(USE_SUPABASE){
-      // Sobe avatar para Storage se for base64 (evita payload gigante no DB)
+      // Tenta subir avatar para Storage; se falhar, usa base64 comprimida como fallback
       let avatarUrl=avatar||null;
       if(avatar&&avatar.startsWith("data:")){
         try{
           const res=await fetch(avatar);const blob=await res.blob();
           const path=`avatars/${user.id}.jpg`;
           const{error:upErr}=await sb.storage.from("avatars").upload(path,blob,{upsert:true,contentType:"image/jpeg"});
-          if(!upErr){const{data:pub}=sb.storage.from("avatars").getPublicUrl(path);avatarUrl=pub.publicUrl;}
+          if(!upErr){
+            const{data:pub}=sb.storage.from("avatars").getPublicUrl(path);
+            avatarUrl=pub.publicUrl;
+          }
+          // Se Storage falhar, avatarUrl permanece como data: (base64 já comprimida ~50KB, cabe no DB)
         }catch(e){console.warn("[SB] avatar upload",e.message);}
       }
 
-      // Sobe banner para Storage se for base64
+      // Tenta subir banner para Storage; fallback igual
       let bannerImgUrl=bannerImg||null;
       if(bannerImg&&bannerImg.startsWith("data:")){
         try{
           const res=await fetch(bannerImg);const blob=await res.blob();
           const path=`banners/${user.id}.jpg`;
           const{error:upErr}=await sb.storage.from("avatars").upload(path,blob,{upsert:true,contentType:"image/jpeg"});
-          if(!upErr){const{data:pub}=sb.storage.from("avatars").getPublicUrl(path);bannerImgUrl=pub.publicUrl;}
+          if(!upErr){
+            const{data:pub}=sb.storage.from("avatars").getPublicUrl(path);
+            bannerImgUrl=pub.publicUrl;
+          }
         }catch(e){console.warn("[SB] banner upload",e.message);}
       }
 
@@ -2878,14 +2887,20 @@ function ProfileTab({user,setUser,isDonorTheme=false,setIsDonorTheme=()=>{}}){
         age:age?String(age):null,
         course:course||null
       });
-      if(error){console.error("[SB] profile save error:",error.message);setOk("Erro ao salvar: "+error.message);return;}
 
-      // Atualiza estado local com URLs do Storage (não base64)
+      if(error){
+        console.error("[SB] profile save error:",error.message);
+        setOk("⚠️ Erro ao salvar no servidor: "+error.message);
+        setTimeout(()=>setOk(""),5000);
+        return;
+      }
+
+      // Atualiza estado local com URLs finais
       const freshProf={...np,avatar:avatarUrl,bannerImg:bannerImgUrl};
       saveProfile(user.id,freshProf);setProf(freshProf);
       setAvatar(avatarUrl||"");setBannerImg(bannerImgUrl);
     }
-    setEditing(false);setOk("Perfil atualizado!");setTimeout(()=>setOk(""),2500);
+    setOk("✅ Perfil atualizado!");setTimeout(()=>setOk(""),3000);
   };
 
   const bannerStyle=bannerImg?{backgroundImage:`url(${bannerImg})`,backgroundSize:"cover",backgroundPosition:"center"}:{background:banner||BANNER_PRESETS[0]};
