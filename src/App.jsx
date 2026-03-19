@@ -837,7 +837,7 @@ function AuthPage({onLogin}){
   };
 
   const verifyCode=async()=>{
-    if(code.trim().length!==6){setCodeErr("Digite o código de 6 dígitos.");return;}
+    if(code.trim().length<6||code.trim().length>8){setCodeErr("Digite o código enviado por e-mail.");return;}
     if(expired){setCodeErr("Código expirado. Solicite um novo.");return;}
     setCodeLoading(true);setCodeErr("");
     try{
@@ -865,7 +865,7 @@ function AuthPage({onLogin}){
         <div style={{fontSize:44,marginBottom:12}}>📨</div>
         <h2 style={{fontSize:20,fontWeight:700,marginBottom:8}}>Verifique seu e-mail</h2>
         <p style={{fontSize:13,color:"var(--t2)",lineHeight:1.7}}>
-          Enviamos um código de 6 dígitos para<br/>
+          Enviamos um código de verificação para<br/>
           <strong style={{color:"var(--t)"}}>{pendingRef.current.email}</strong>
         </p>
       </div>
@@ -880,14 +880,14 @@ function AuthPage({onLogin}){
       {codeErr&&<div className="er">{codeErr}</div>}
       <div className="fg">
         <label>Código de verificação</label>
-        <input className="inp" maxLength={6} placeholder="000000"
+        <input className="inp" maxLength={8} placeholder="00000000"
           value={code} onChange={e=>setCode(e.target.value.replace(/\D/g,""))}
           onKeyDown={e=>e.key==="Enter"&&!codeLoading&&!expired&&verifyCode()}
           style={{textAlign:"center",fontSize:24,fontWeight:700,letterSpacing:8,fontVariantNumeric:"tabular-nums"}}
           autoFocus/>
       </div>
       <button className="btn btn-f" style={{width:"100%",fontSize:14,marginBottom:10}}
-        onClick={verifyCode} disabled={codeLoading||expired||code.length!==6}>
+        onClick={verifyCode} disabled={codeLoading||expired||code.length<6}>
         {codeLoading?"Verificando...":"Confirmar código ✓"}
       </button>
       {expired
