@@ -542,8 +542,16 @@ export default function App(){
   const [dark,setDark]=useState(()=>DB.get("sv5_theme")!=="light");
   const [authLoading,setAuthLoading]=useState(USE_SUPABASE);
   const [activeBan,setActiveBan]=useState(null);
-  // Controla tema dourado para apoiadores
   const [isDonorTheme,setIsDonorTheme]=useState(()=>DB.get("sv5_donor_theme")===true);
+  // Toast global — aparece fixo no topo independente de qual aba está aberta
+  const [toast,setToast]=useState(null); // {msg, type: "ok"|"er"}
+  const toastTimerRef=useRef(null);
+  const showToast=(msg,type="ok",duration=3500)=>{
+    clearTimeout(toastTimerRef.current);
+    setToast({msg,type});
+    toastTimerRef.current=setTimeout(()=>setToast(null),duration);
+  };
+  useEffect(()=>()=>clearTimeout(toastTimerRef.current),[]);
 
   useEffect(()=>{
     // Tema dourado tem prioridade quando ativo
@@ -731,6 +739,18 @@ export default function App(){
 
   return(<>
     <div className="mesh"/>
+    {/* Toast global fixo — não some com re-renders de componentes filhos */}
+    {toast&&(
+      <div style={{position:"fixed",top:16,left:"50%",transform:"translateX(-50%)",zIndex:999999,
+        padding:"11px 20px",borderRadius:12,fontSize:13,fontWeight:600,whiteSpace:"nowrap",
+        boxShadow:"0 4px 20px rgba(0,0,0,0.35)",pointerEvents:"none",
+        background:toast.type==="ok"?"rgba(86,234,172,0.18)":"rgba(255,70,70,0.18)",
+        border:`1px solid ${toast.type==="ok"?"rgba(86,234,172,0.40)":"rgba(255,70,70,0.35)"}`,
+        color:toast.type==="ok"?"#5eead4":"#ff9494",
+        backdropFilter:"blur(12px)"}}>
+        {toast.msg}
+      </div>
+    )}
     <div className="app">
       {!user?<AuthPage onLogin={login}/>:<>
         <NavBar user={user} tab={tab} setTab={(t)=>{setTab(t);if(t!=="comunidade")setViewUser(null);SFX.tab();}} onLogout={logout} dark={dark} toggleTheme={toggleTheme}/>
@@ -739,7 +759,7 @@ export default function App(){
           {tab==="materias"  &&<div key="m" className="page-enter"><SubjectsTab   user={user}/></div>}
           {tab==="agenda"    &&<div key="a" className="page-enter"><AgendaTab     user={user}/></div>}
           {tab==="comunidade"&&<div key="c" className="page-enter"><CommunityTab  user={user} viewUser={viewUser} setViewUser={setViewUser}/></div>}
-          {tab==="perfil"    &&<div key="p" className="page-enter"><ProfileTab    user={user} setUser={(u)=>{DB.set(K.session,u);setUser(u);}} isDonorTheme={isDonorTheme} setIsDonorTheme={(v)=>{setIsDonorTheme(v);DB.set("sv5_donor_theme",v);}}/></div>}
+          {tab==="perfil"    &&<div key="p" className="page-enter"><ProfileTab    user={user} setUser={(u)=>{DB.set(K.session,u);setUser(u);}} isDonorTheme={isDonorTheme} setIsDonorTheme={(v)=>{setIsDonorTheme(v);DB.set("sv5_donor_theme",v);}} showToast={showToast}/></div>}
           {tab==="admin"     &&<div key="ad" className="page-enter"><AdminTab      user={user} refreshUser={refreshUser}/></div>}
           {tab==="feedback"  &&<div key="fb" className="page-enter"><FeedbackTab   user={user}/></div>}
           {tab==="apoio"     &&<div key="ap" className="page-enter"><SupportTab user={user} isDonorTheme={isDonorTheme} setIsDonorTheme={(v)=>{setIsDonorTheme(v);DB.set("sv5_donor_theme",v);}}/></div>}
@@ -2772,7 +2792,7 @@ function ActivityFeed({userId}){
   ))}</div>);
 }
 
-function ProfileTab({user,setUser,isDonorTheme=false,setIsDonorTheme=()=>{}}){
+function ProfileTab({user,setUser,isDonorTheme=false,setIsDonorTheme=()=>{},showToast=()=>{}}){
   const [prof,setProf]=useState(()=>getProfile(user.id));
   const [editing,setEditing]=useState(false);
   const [name,setName]=useState(user.name);
@@ -2837,70 +2857,48 @@ function ProfileTab({user,setUser,isDonorTheme=false,setIsDonorTheme=()=>{}}){
   };
 
   const save=async()=>{
-    setOk(""); // limpa msg anterior
     const np={...prof,bio,avatar,banner:bannerImg?null:banner,bannerImg,gender,age,course};
     saveProfile(user.id,np);setProf(np);
     const users=DB.get(K.users)||{};
     if(users[user.email])DB.set(K.users,{...users,[user.email]:{...users[user.email],name:name.trim()}});
     const nu={...user,name:name.trim()};setUser(nu);
-    setEditing(false); // fecha edição imediatamente — confirmação aparece na view
+    setEditing(false);
 
     if(USE_SUPABASE){
-      // Tenta subir avatar para Storage; se falhar, usa base64 comprimida como fallback
       let avatarUrl=avatar||null;
       if(avatar&&avatar.startsWith("data:")){
         try{
           const res=await fetch(avatar);const blob=await res.blob();
           const path=`avatars/${user.id}.jpg`;
           const{error:upErr}=await sb.storage.from("avatars").upload(path,blob,{upsert:true,contentType:"image/jpeg"});
-          if(!upErr){
-            const{data:pub}=sb.storage.from("avatars").getPublicUrl(path);
-            avatarUrl=pub.publicUrl;
-          }
-          // Se Storage falhar, avatarUrl permanece como data: (base64 já comprimida ~50KB, cabe no DB)
+          if(!upErr){const{data:pub}=sb.storage.from("avatars").getPublicUrl(path);avatarUrl=pub.publicUrl;}
         }catch(e){console.warn("[SB] avatar upload",e.message);}
       }
-
-      // Tenta subir banner para Storage; fallback igual
       let bannerImgUrl=bannerImg||null;
       if(bannerImg&&bannerImg.startsWith("data:")){
         try{
           const res=await fetch(bannerImg);const blob=await res.blob();
           const path=`banners/${user.id}.jpg`;
           const{error:upErr}=await sb.storage.from("avatars").upload(path,blob,{upsert:true,contentType:"image/jpeg"});
-          if(!upErr){
-            const{data:pub}=sb.storage.from("avatars").getPublicUrl(path);
-            bannerImgUrl=pub.publicUrl;
-          }
+          if(!upErr){const{data:pub}=sb.storage.from("avatars").getPublicUrl(path);bannerImgUrl=pub.publicUrl;}
         }catch(e){console.warn("[SB] banner upload",e.message);}
       }
-
       const{error}=await sb.from("profiles").upsert({
-        id:user.id,
-        name:name.trim(),
-        email:user.email,
-        bio:bio||null,
-        avatar_url:avatarUrl,
-        banner:bannerImg?null:(banner||null),
-        banner_img:bannerImgUrl,
-        gender:gender||null,
-        age:age?String(age):null,
-        course:course||null
+        id:user.id,name:name.trim(),email:user.email,bio:bio||null,
+        avatar_url:avatarUrl,banner:bannerImg?null:(banner||null),
+        banner_img:bannerImgUrl,gender:gender||null,
+        age:age?String(age):null,course:course||null
       },{onConflict:"id"});
-
       if(error){
-        console.error("[SB] profile save error:",error.message);
-        setOk("⚠️ Erro ao salvar no servidor: "+error.message);
-        setTimeout(()=>setOk(""),5000);
+        showToast("⚠️ Erro ao salvar: "+error.message,"er",6000);
         return;
       }
-
-      // Atualiza estado local com URLs finais
       const freshProf={...np,avatar:avatarUrl,bannerImg:bannerImgUrl};
       saveProfile(user.id,freshProf);setProf(freshProf);
       setAvatar(avatarUrl||"");setBannerImg(bannerImgUrl);
     }
-    setOk("✅ Perfil atualizado!");setTimeout(()=>setOk(""),3000);
+    showToast("✅ Perfil atualizado!","ok");
+    SFX.save();
   };
 
   const bannerStyle=bannerImg?{backgroundImage:`url(${bannerImg})`,backgroundSize:"cover",backgroundPosition:"center"}:{background:banner||BANNER_PRESETS[0]};
